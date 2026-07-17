@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Btn } from '../components/Btn'
@@ -32,12 +32,27 @@ export function Scan() {
   const cooldownRef = useRef(false)
 
   useEffect(() => {
-    const scanner = new Html5Qrcode(SCANNER_ID)
+    const scanner = new Html5Qrcode(SCANNER_ID, {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.QR_CODE,
+      ],
+      verbose: false,
+    })
     scannerRef.current = scanner
 
     scanner.start(
-      { facingMode: 'environment' }, // 背面カメラを優先
-      { fps: 10, qrbox: { width: 280, height: 180 } },
+      { facingMode: 'environment' },
+      {
+        fps: 15,
+        // ビューファインダーの幅70%・高さ40%をスキャン対象にする
+        qrbox: (w, h) => ({ width: Math.floor(w * 0.7), height: Math.floor(h * 0.4) }),
+      },
       (decodedText) => {
         if (cooldownRef.current) return
         cooldownRef.current = true
