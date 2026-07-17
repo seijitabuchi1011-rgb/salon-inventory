@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/browser'
-import { NotFoundException } from '@zxing/library'
+import { Html5Qrcode } from 'html5-qrcode'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Btn } from '../components/Btn'
@@ -14,12 +13,13 @@ type ScanResult = {
   lienStock: number
 }
 
-// ダミー商品データ（バーコード → 商品情報）
 const PRODUCT_DB: Record<string, Omit<ScanResult, 'barcode'>> = {
   '4901234567890': { name: 'ミルボン ジェミールフラン シャンプー 500ml', flagStock: 8, lienStock: 3 },
   '4989316012345': { name: 'ナプラ ケアテクトHB カラーシャンプー 300ml', flagStock: 0, lienStock: 4 },
   '4901862012345': { name: 'ケラスターゼ フォンダン トリートメント', flagStock: 12, lienStock: 6 },
 }
+
+const SCANNER_ID = 'html5-qrcode-scanner'
 
 export function Scan() {
   const [mode, setMode] = useState<ScanMode>('入荷')
@@ -27,54 +27,39 @@ export function Scan() {
   const [showQty, setShowQty] = useState(false)
   const [lastScan, setLastScan] = useState<ScanResult | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [scanning, setScanning] = useState(false)
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null)
-  // スキャン済みコードを一時的に無視するタイマー用
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const cooldownRef = useRef(false)
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader()
-    readerRef.current = reader
+    const scanner = new Html5Qrcode(SCANNER_ID)
+    scannerRef.current = scanner
 
-    if (!videoRef.current) return
+    scanner.start(
+      { facingMode: 'environment' }, // 背面カメラを優先
+      { fps: 10, qrbox: { width: 280, height: 180 } },
+      (decodedText) => {
+        if (cooldownRef.current) return
+        cooldownRef.current = true
 
-    setScanning(true)
-    setCameraError(null)
-
-    reader.decodeFromVideoDevice(
-      undefined, // デフォルトカメラ
-      videoRef.current,
-      (result, error) => {
-        if (result && !cooldownRef.current) {
-          cooldownRef.current = true
-          const barcode = result.getText()
-          const product = PRODUCT_DB[barcode]
-          setLastScan({
-            barcode,
-            name: product?.name ?? `不明な商品 (${barcode})`,
-            flagStock: product?.flagStock ?? 0,
-            lienStock: product?.lienStock ?? 0,
-          })
-          setQty(1)
-          setShowQty(true)
-          // 2秒間は同じコードを無視
-          setTimeout(() => { cooldownRef.current = false }, 2000)
-        }
-        if (error && !(error instanceof NotFoundException)) {
-          setCameraError('カメラにアクセスできませんでした。ブラウザの設定でカメラを許可してください。')
-          setScanning(false)
-        }
-      }
+        const product = PRODUCT_DB[decodedText]
+        setLastScan({
+          barcode: decodedText,
+          name: product?.name ?? `不明な商品 (${decodedText})`,
+          flagStock: product?.flagStock ?? 0,
+          lienStock: product?.lienStock ?? 0,
+        })
+        setQty(1)
+        setShowQty(true)
+        setTimeout(() => { cooldownRef.current = false }, 2000)
+      },
+      () => { /* スキャン試行中のエラーは無視 */ }
     ).catch(() => {
-      setCameraError('カメラにアクセスできませんでした。ブラウザの設定でカメラを許可してください。')
-      setScanning(false)
+      setCameraError('カメラにアクセスできませんでした。\nブラウザの設定でカメラを許可してください。')
     })
 
     return () => {
-      // コンポーネントアンマウント時にカメラ停止
-      BrowserMultiFormatReader.releaseAllStreams()
+      scanner.stop().catch(() => {})
     }
   }, [])
 
@@ -84,45 +69,31 @@ export function Scan() {
       <AppBar title="バーコード読み取り" back />
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
-        {/* カメラビュー */}
+
         <div className="flex-1 relative bg-[#1A1A1A] overflow-hidden">
 
-          {/* カメラ映像 */}
-          <video
-            ref={videoRef}
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ display: scanning ? 'block' : 'none' }}
-            playsInline
-            autoPlay
-            muted
+          {/* html5-qrcode がカメラ映像を描画するコンテナ */}
+          <div
+            id={SCANNER_ID}
+            className="absolute inset-0"
+            style={{ width: '100%', height: '100%' }}
           />
 
-          {/* カメラエラー時のフォールバック */}
+          {/* カメラエラー */}
           {cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 bg-[#1A1A1A]">
               <div className="text-white text-center">
                 <div className="text-4xl mb-3">📷</div>
-                <p className="text-base font-semibold">{cameraError}</p>
+                <p className="text-base font-semibold whitespace-pre-line">{cameraError}</p>
               </div>
-              <Btn
-                variant="ghost"
-                className="bg-white"
-                onClick={() => window.location.reload()}
-              >
+              <Btn variant="ghost" className="bg-white" onClick={() => window.location.reload()}>
                 再試行
               </Btn>
             </div>
           )}
 
-          {/* カメラ起動中 */}
-          {!scanning && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-white text-sm">カメラ起動中...</p>
-            </div>
-          )}
-
           {/* 上部モード切替 */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
             <div className="flex bg-white/95 rounded-xl p-1 gap-1">
               {(['入荷', '販売', '検索', '棚卸'] as ScanMode[]).map((m) => (
                 <button
@@ -138,8 +109,8 @@ export function Scan() {
             </div>
           </div>
 
-          {/* スキャン枠 */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          {/* スキャン枠オーバーレイ */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="relative" style={{ width: 520, height: 320 }}>
               <div
                 className="absolute inset-0 border-2 border-white rounded-xl"
@@ -159,7 +130,7 @@ export function Scan() {
             </div>
           </div>
 
-          {/* 直近のスキャン結果カード */}
+          {/* 直近のスキャン結果 */}
           {lastScan && (
             <div className="absolute left-5 bottom-5 right-60 bg-white rounded-xl p-3.5 flex items-center gap-3.5 z-10">
               <div
