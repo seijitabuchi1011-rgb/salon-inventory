@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
+import { fetchJanProduct } from '../lib/jancode'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Btn } from '../components/Btn'
@@ -9,14 +10,10 @@ type ScanMode = '入荷' | '販売' | '検索' | '棚卸'
 type ScanResult = {
   barcode: string
   name: string
-  flagStock: number
-  lienStock: number
-}
-
-const PRODUCT_DB: Record<string, Omit<ScanResult, 'barcode'>> = {
-  '4901234567890': { name: 'ミルボン ジェミールフラン シャンプー 500ml', flagStock: 8, lienStock: 3 },
-  '4989316012345': { name: 'ナプラ ケアテクトHB カラーシャンプー 300ml', flagStock: 0, lienStock: 4 },
-  '4901862012345': { name: 'ケラスターゼ フォンダン トリートメント', flagStock: 12, lienStock: 6 },
+  brand: string
+  category: string
+  imageUrl: string | null
+  found: boolean
 }
 
 const SCANNER_ID = 'html5-qrcode-scanner'
@@ -26,6 +23,7 @@ export function Scan() {
   const [qty, setQty] = useState(1)
   const [showQty, setShowQty] = useState(false)
   const [lastScan, setLastScan] = useState<ScanResult | null>(null)
+  const [loading, setLoading] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
   const scannerRef = useRef<Html5Qrcode | null>(null)
@@ -50,32 +48,34 @@ export function Scan() {
       { facingMode: 'environment' },
       {
         fps: 15,
-        // ビューファインダーの幅70%・高さ40%をスキャン対象にする
         qrbox: (w, h) => ({ width: Math.floor(w * 0.7), height: Math.floor(h * 0.4) }),
       },
-      (decodedText) => {
+      async (barcode) => {
         if (cooldownRef.current) return
         cooldownRef.current = true
+        setLoading(true)
 
-        const product = PRODUCT_DB[decodedText]
+        const product = await fetchJanProduct(barcode)
         setLastScan({
-          barcode: decodedText,
-          name: product?.name ?? `不明な商品 (${decodedText})`,
-          flagStock: product?.flagStock ?? 0,
-          lienStock: product?.lienStock ?? 0,
+          barcode,
+          name: product.found ? product.name : `未登録商品`,
+          brand: product.brand,
+          category: product.category,
+          imageUrl: product.imageUrl,
+          found: product.found,
         })
+        setLoading(false)
         setQty(1)
         setShowQty(true)
+
         setTimeout(() => { cooldownRef.current = false }, 2000)
       },
-      () => { /* スキャン試行中のエラーは無視 */ }
+      () => {}
     ).catch(() => {
       setCameraError('カメラにアクセスできませんでした。\nブラウザの設定でカメラを許可してください。')
     })
 
-    return () => {
-      scanner.stop().catch(() => {})
-    }
+    return () => { scanner.stop().catch(() => {}) }
   }, [])
 
   return (
@@ -87,12 +87,8 @@ export function Scan() {
 
         <div className="flex-1 relative bg-[#1A1A1A] overflow-hidden">
 
-          {/* html5-qrcode がカメラ映像を描画するコンテナ */}
-          <div
-            id={SCANNER_ID}
-            className="absolute inset-0"
-            style={{ width: '100%', height: '100%' }}
-          />
+          {/* カメラ映像コンテナ */}
+          <div id={SCANNER_ID} className="absolute inset-0" style={{ width: '100%', height: '100%' }} />
 
           {/* カメラエラー */}
           {cameraError && (
@@ -101,14 +97,20 @@ export function Scan() {
                 <div className="text-4xl mb-3">📷</div>
                 <p className="text-base font-semibold whitespace-pre-line">{cameraError}</p>
               </div>
-              <Btn variant="ghost" className="bg-white" onClick={() => window.location.reload()}>
-                再試行
-              </Btn>
+              <Btn variant="ghost" className="bg-white" onClick={() => window.location.reload()}>再試行</Btn>
+            </div>
+          )}
+
+          {/* API取得中オーバーレイ */}
+          {loading && (
+            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 z-30">
+              <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+              <p className="text-white text-sm font-semibold">商品情報を取得中...</p>
             </div>
           )}
 
           {/* 上部モード切替 */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
             <div className="flex bg-white/95 rounded-xl p-1 gap-1">
               {(['入荷', '販売', '検索', '棚卸'] as ScanMode[]).map((m) => (
                 <button
@@ -135,10 +137,7 @@ export function Scan() {
               <div className="absolute top-[-3px] right-[-3px] w-10 h-10 border-accent border-t-[6px] border-r-[6px]" />
               <div className="absolute bottom-[-3px] left-[-3px] w-10 h-10 border-accent border-b-[6px] border-l-[6px]" />
               <div className="absolute bottom-[-3px] right-[-3px] w-10 h-10 border-accent border-b-[6px] border-r-[6px]" />
-              <div
-                className="absolute left-5 right-5 top-1/2 h-0.5 bg-accent"
-                style={{ boxShadow: '0 0 12px #4F4CE8' }}
-              />
+              <div className="absolute left-5 right-5 top-1/2 h-0.5 bg-accent" style={{ boxShadow: '0 0 12px #4F4CE8' }} />
               <div className="absolute -bottom-10 left-0 right-0 text-center text-white text-sm font-semibold tracking-wide">
                 枠内にバーコードを合わせてください
               </div>
@@ -148,15 +147,24 @@ export function Scan() {
           {/* 直近のスキャン結果 */}
           {lastScan && (
             <div className="absolute left-5 bottom-5 right-60 bg-white rounded-xl p-3.5 flex items-center gap-3.5 z-10">
-              <div
-                className="w-14 h-14 rounded-lg flex-shrink-0"
-                style={{ background: 'repeating-linear-gradient(45deg, #F1F1EE 0 6px, #E8E8E4 6px 12px)' }}
-              />
+              {lastScan.imageUrl ? (
+                <img
+                  src={lastScan.imageUrl}
+                  className="w-14 h-14 rounded-lg flex-shrink-0 object-cover border border-border"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-lg flex-shrink-0" style={{ background: 'repeating-linear-gradient(45deg,#F1F1EE 0 6px,#E8E8E4 6px 12px)' }} />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-2xs text-faint font-semibold">直前のスキャン</p>
-                <p className="text-md font-bold text-text truncate">{lastScan.name}</p>
+                <p className={`text-md font-bold truncate ${lastScan.found ? 'text-text' : 'text-muted'}`}>
+                  {lastScan.name}
+                </p>
                 <p className="text-xs text-muted">
-                  {lastScan.barcode} · flag {lastScan.flagStock} / Lien {lastScan.lienStock}
+                  {lastScan.barcode}
+                  {lastScan.brand ? ` · ${lastScan.brand}` : ''}
+                  {!lastScan.found && ' · 商品登録が必要です'}
                 </p>
               </div>
               <button
@@ -179,7 +187,11 @@ export function Scan() {
             <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20">
               <div className="bg-white rounded-xl p-6 w-80">
                 <p className="text-xs text-muted font-semibold mb-1">{mode}モード</p>
-                <p className="text-base font-bold mb-4 truncate">{lastScan.name}</p>
+                <p className="text-base font-bold mb-1 truncate">{lastScan.name}</p>
+                {lastScan.brand && (
+                  <p className="text-xs text-muted mb-4">{lastScan.brand}</p>
+                )}
+                {!lastScan.brand && <div className="mb-4" />}
                 <div className="flex items-center gap-3 mb-5">
                   <button
                     onClick={() => setQty(Math.max(1, qty - 1))}
