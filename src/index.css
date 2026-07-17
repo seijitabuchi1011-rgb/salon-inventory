@@ -16,5 +16,11 @@ body {
 #root {
   width: 100%;
   height: 100vh;
+  height: 100dvh; /* iOS Safari のアドレスバー分を正確に除外 */
   overflow: hidden;
+}
+
+/* iOS Safari でボタンのタップ遅延を除去 */
+button, a, [role="button"] {
+  touch-action: manipulation;
 }

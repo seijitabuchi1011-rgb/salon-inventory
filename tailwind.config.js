@@ -48,6 +48,15 @@ export default {
         lg: '12px',
         xl: '14px',
       },
+      spacing: {
+        sidenav: '88px',
+        status: '24px',
+        'btn-md': '52px',
+        'btn-lg': '60px',
+      },
+      width: {
+        sidenav: '88px',
+      },
     },
   },
   plugins: [],
