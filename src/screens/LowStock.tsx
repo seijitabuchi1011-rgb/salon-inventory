@@ -53,7 +53,16 @@ export function LowStock() {
                 </p>
               </div>
               <div className="flex-1" />
-              <Btn variant="ghost" size="sm">CSVエクスポート</Btn>
+              <Btn variant="ghost" size="sm" onClick={() => {
+                const header = ['商品名', 'カテゴリ', 'flag在庫', 'Lien在庫', '下限', '推奨発注数']
+                const rows = filtered.map((p) => [p.name, p.category, p.flag, p.lien, p.min, p.need])
+                const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
+                const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(blob)
+                a.download = '在庫不足一覧.csv'
+                a.click()
+              }}>CSVエクスポート</Btn>
               <Btn variant="primary" size="sm" disabled={selected.size === 0}>
                 ↧ 選択中 {selected.size}件をまとめて発注
               </Btn>
