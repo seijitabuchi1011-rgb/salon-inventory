@@ -92,6 +92,9 @@ export function Scan() {
             ref={videoRef}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ display: scanning ? 'block' : 'none' }}
+            playsInline
+            autoPlay
+            muted
           />
 
           {/* カメラエラー時のフォールバック */}
