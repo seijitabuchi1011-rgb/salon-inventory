@@ -22,9 +22,10 @@ function stockStatus(current: number, min: number): { label: string; variant: 'd
 
 export function Products() {
   const navigate = useNavigate()
-  const { products, stocks } = useAppStore()
+  const { products, stocks, deleteProduct } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('すべて')
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
@@ -87,6 +88,7 @@ export function Products() {
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">Lien</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">合計</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-muted w-24">状態</th>
+                  <th className="w-16"></th>
                 </tr>
               </thead>
               <tbody>
@@ -127,6 +129,14 @@ export function Products() {
                       <td className="px-4 py-3 text-center">
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </td>
+                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => setConfirmId(p.id)}
+                          className="px-2 py-1 text-xs text-danger border border-danger rounded hover:bg-danger-soft transition-colors"
+                        >
+                          削除
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -135,6 +145,33 @@ export function Products() {
           </div>
         </main>
       </div>
+
+      {/* 削除確認ダイアログ */}
+      {confirmId && (() => {
+        const target = products.find((p) => p.id === confirmId)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-surface rounded-xl shadow-xl p-6 w-80 flex flex-col gap-4">
+              <p className="text-sm font-bold text-text">商品を削除しますか？</p>
+              <p className="text-sm text-muted">「{target?.name}」を削除します。この操作は元に戻せません。</p>
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setConfirmId(null)}
+                  className="px-4 py-2 text-sm rounded-md border border-border text-muted hover:bg-bg transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={() => { deleteProduct(confirmId); setConfirmId(null) }}
+                  className="px-4 py-2 text-sm rounded-md bg-danger text-white hover:bg-danger/90 transition-colors"
+                >
+                  削除する
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

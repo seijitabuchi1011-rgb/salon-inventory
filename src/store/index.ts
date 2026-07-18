@@ -9,9 +9,17 @@ interface AppState {
   stocks: StoreStock[]
   upsertProduct: (product: Product) => void
   upsertStock: (stock: StoreStock) => void
+  deleteProduct: (id: string) => void
 }
 
 const initialProducts: Product[] = [
+  // ブリーチ剤
+  { id: '26', name: 'アクセスフリー',      category: 'ブリーチ剤', maker: '',         barcode: '', purchasePrice: 2030, sellPrice: 2900 },
+  { id: '27', name: 'ヴィーガンブリーチ',  category: 'ブリーチ剤', maker: '',         barcode: '', purchasePrice: 2713, sellPrice:    0 },
+  { id: '28', name: 'クレイブリーチ',      category: 'ブリーチ剤', maker: '',         barcode: '', purchasePrice: 2800, sellPrice: 3800 },
+  { id: '29', name: 'アリミノ１２０',      category: 'ブリーチ剤', maker: 'アリミノ', barcode: '', purchasePrice: 2660, sellPrice: 3800 },
+  { id: '30', name: 'ティントエスケープ',  category: 'ブリーチ剤', maker: '',         barcode: '', purchasePrice: 1400, sellPrice: 2000 },
+  // カラー剤
   { id: '7',  name: 'キャラデコ',                                         category: 'カラー剤',      maker: 'ホーユー',       barcode: '', purchasePrice:  300, sellPrice:  600 },
   { id: '8',  name: 'ライトニングブースター',                              category: 'カラー剤',      maker: 'シュワルツコフ',  barcode: '', purchasePrice: 1760, sellPrice:    0 },
   { id: '9',  name: 'マテリア',                                           category: 'カラー剤',      maker: 'ミルボン',       barcode: '', purchasePrice:  455, sellPrice:  650 },
@@ -34,6 +42,18 @@ const initialProducts: Product[] = [
 ]
 
 const initialStocks: StoreStock[] = [
+  // ブリーチ剤
+  { productId: '26', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '26', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '27', storeId: 'flag', currentStock: 1, minStock: 1, active: true },
+  { productId: '27', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '28', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '28', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '29', storeId: 'flag', currentStock: 1, minStock: 1, active: true },
+  { productId: '29', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '30', storeId: 'flag', currentStock: 1, minStock: 1, active: true },
+  { productId: '30', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  // カラー剤
   { productId: '7',  storeId: 'flag', currentStock:  46, minStock: 10, active: true },
   { productId: '7',  storeId: 'lien', currentStock:   0, minStock:  5, active: true },
   { productId: '8',  storeId: 'flag', currentStock:   2, minStock:  2, active: true },
@@ -103,6 +123,11 @@ export const useAppStore = create<AppState>()(
               : [...state.stocks, stock],
           }
         }),
+      deleteProduct: (id) =>
+        set((state) => ({
+          products: state.products.filter((p) => p.id !== id),
+          stocks: state.stocks.filter((s) => s.productId !== id),
+        })),
     }),
     {
       name: 'salon-inventory-store',
