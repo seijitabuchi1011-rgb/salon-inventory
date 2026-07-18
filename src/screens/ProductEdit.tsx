@@ -44,7 +44,7 @@ function NumberInput({ value, onChange }: { value: number; onChange: (v: number)
 export function ProductEdit() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { products } = useAppStore()
+  const { products, upsertProduct, upsertStock } = useAppStore()
   const existing = id && id !== 'new' ? products.find((p) => p.id === id) : undefined
 
   const [name, setName] = useState(existing?.name ?? '')
@@ -63,6 +63,23 @@ export function ProductEdit() {
 
   const title = existing ? '商品登録・編集' : '商品登録・編集'
 
+  const handleSave = () => {
+    const productId = existing?.id ?? String(Date.now())
+    upsertProduct({
+      id: productId,
+      name,
+      category,
+      maker,
+      barcode,
+      purchasePrice: Number(purchasePrice) || 0,
+      sellPrice: Number(sellPrice) || 0,
+      memo,
+    })
+    upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
+    upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
+    navigate(-1)
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="h-status bg-surface border-b border-border" />
@@ -73,7 +90,7 @@ export function ProductEdit() {
         right={
           <div className="flex gap-2">
             <Btn variant="ghost" size="sm" onClick={() => navigate(-1)}>キャンセル</Btn>
-            <Btn variant="primary" size="sm" onClick={() => navigate(-1)}>✓ 保存</Btn>
+            <Btn variant="primary" size="sm" onClick={handleSave}>✓ 保存</Btn>
           </div>
         }
       />

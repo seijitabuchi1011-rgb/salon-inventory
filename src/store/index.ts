@@ -6,6 +6,8 @@ interface AppState {
   setCurrentStore: (store: StoreFilter) => void
   products: Product[]
   stocks: StoreStock[]
+  upsertProduct: (product: Product) => void
+  upsertStock: (stock: StoreStock) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -74,4 +76,26 @@ export const useAppStore = create<AppState>((set) => ({
     { productId: '25', storeId: 'flag', currentStock:   3, minStock:  2, active: true },
     { productId: '25', storeId: 'lien', currentStock:   0, minStock:  1, active: true },
   ],
+  upsertProduct: (product) =>
+    set((state) => {
+      const exists = state.products.some((p) => p.id === product.id)
+      return {
+        products: exists
+          ? state.products.map((p) => (p.id === product.id ? product : p))
+          : [...state.products, product],
+      }
+    }),
+  upsertStock: (stock) =>
+    set((state) => {
+      const exists = state.stocks.some(
+        (s) => s.productId === stock.productId && s.storeId === stock.storeId
+      )
+      return {
+        stocks: exists
+          ? state.stocks.map((s) =>
+              s.productId === stock.productId && s.storeId === stock.storeId ? stock : s
+            )
+          : [...state.stocks, stock],
+      }
+    }),
 }))
