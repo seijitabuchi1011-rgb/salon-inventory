@@ -32,18 +32,26 @@ export function Orders() {
   const [category, setCategory] = useState('すべて')
   const [modal, setModal] = useState<ModalState | null>(null)
 
+  const isReceive = tab === 'receive'
+
   function getStock(productId: string, storeId: 'flag' | 'lien') {
     return stocks.find((s) => s.productId === productId && s.storeId === storeId)
   }
 
-  const filtered = products.filter((p) => {
-    const matchSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.barcode.includes(search)
-    const matchCat = category === 'すべて' || p.category === category
-    return matchSearch && matchCat
-  })
+  // ワンタッチで ±1
+  function quickUpdate(productId: string, storeId: 'flag' | 'lien', delta: number) {
+    const s = getStock(productId, storeId)
+    const next = Math.max(0, (s?.currentStock ?? 0) + delta)
+    upsertStock({
+      productId,
+      storeId,
+      currentStock: next,
+      minStock: s?.minStock ?? 3,
+      active: s?.active ?? true,
+    })
+  }
 
+  // モーダルで任意数を入力
   function openModal(productId: string, productName: string, storeId: 'flag' | 'lien') {
     const s = getStock(productId, storeId)
     setModal({
@@ -59,10 +67,9 @@ export function Orders() {
 
   function confirmTransaction() {
     if (!modal) return
-    const newStock =
-      tab === 'receive'
-        ? modal.currentStock + modal.quantity
-        : Math.max(0, modal.currentStock - modal.quantity)
+    const newStock = isReceive
+      ? modal.currentStock + modal.quantity
+      : Math.max(0, modal.currentStock - modal.quantity)
     upsertStock({
       productId: modal.productId,
       storeId: modal.storeId,
@@ -74,17 +81,94 @@ export function Orders() {
   }
 
   const afterStock = modal
-    ? tab === 'receive'
+    ? isReceive
       ? modal.currentStock + modal.quantity
       : Math.max(0, modal.currentStock - modal.quantity)
     : 0
 
-  const isReceive = tab === 'receive'
+  const filtered = products.filter((p) => {
+    const matchSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.barcode.includes(search)
+    const matchCat = category === 'すべて' || p.category === category
+    return matchSearch && matchCat
+  })
+
+  // ストアカラム：在庫数 ＋ ワンタッチボタン ＋ 詳細ボタン
+  function StoreCell({
+    productId,
+    productName,
+    storeId,
+  }: {
+    productId: string
+    productName: string
+    storeId: 'flag' | 'lien'
+  }) {
+    const s = getStock(productId, storeId)
+    const active = s?.active ?? true
+    const stock = s?.currentStock ?? 0
+    const low = active && s != null && s.currentStock <= s.minStock
+
+    if (!active) {
+      return (
+        <>
+          <td className="px-4 py-3 text-right">
+            <span className="text-faint text-xs">取扱なし</span>
+          </td>
+          <td className="px-2 py-3 w-36"></td>
+        </>
+      )
+    }
+
+    return (
+      <>
+        {/* 在庫数（タップでモーダル） */}
+        <td className="px-4 py-3 text-right">
+          <button
+            onClick={() => openModal(productId, productName, storeId)}
+            className={`text-base font-bold tabular-nums underline decoration-dashed underline-offset-2 ${
+              low ? 'text-danger' : 'text-text'
+            }`}
+          >
+            {stock}
+          </button>
+        </td>
+
+        {/* ワンタッチ ＋/ー */}
+        <td className="px-2 py-2 w-36">
+          <div className="flex items-center gap-1 justify-center">
+            {/* ー ボタン（払出） */}
+            <button
+              onClick={() => quickUpdate(productId, storeId, -1)}
+              className={`w-10 h-10 rounded-lg text-lg font-bold transition-all active:scale-95 flex items-center justify-center ${
+                !isReceive
+                  ? 'bg-danger text-white shadow-sm'
+                  : 'bg-bg border border-border text-muted'
+              }`}
+            >
+              −
+            </button>
+            {/* ＋ ボタン（仕入） */}
+            <button
+              onClick={() => quickUpdate(productId, storeId, +1)}
+              className={`w-10 h-10 rounded-lg text-lg font-bold transition-all active:scale-95 flex items-center justify-center ${
+                isReceive
+                  ? 'bg-ok text-white shadow-sm'
+                  : 'bg-bg border border-border text-muted'
+              }`}
+            >
+              ＋
+            </button>
+          </div>
+        </td>
+      </>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full">
       <div className="h-status bg-surface border-b border-border" />
-      <AppBar title="入荷・発注" />
+      <AppBar title="仕入れ" />
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
         <main className="flex-1 flex flex-col overflow-hidden bg-bg">
@@ -93,7 +177,7 @@ export function Orders() {
           <div className="px-6 pt-4 pb-3 bg-surface border-b border-border flex flex-col gap-3">
 
             {/* タブ */}
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-3 items-center">
               <div className="flex rounded-lg border border-border overflow-hidden">
                 <button
                   onClick={() => setTab('receive')}
@@ -101,7 +185,7 @@ export function Orders() {
                     tab === 'receive' ? 'bg-ok text-white' : 'bg-surface text-muted'
                   }`}
                 >
-                  <span className="text-base leading-none">↑</span> 仕入数
+                  ↑ 仕入数
                 </button>
                 <button
                   onClick={() => setTab('dispense')}
@@ -109,13 +193,13 @@ export function Orders() {
                     tab === 'dispense' ? 'bg-danger text-white' : 'bg-surface text-muted'
                   }`}
                 >
-                  <span className="text-base leading-none">↓</span> 払出数
+                  ↓ 払出数
                 </button>
               </div>
               <p className="text-xs text-muted">
                 {isReceive
-                  ? '入荷・仕入れた数量を入力すると在庫が増えます'
-                  : '使用・消費した数量を入力すると在庫が減ります'}
+                  ? '緑の ＋ をタップで即カウントアップ。数字をタップで任意入力'
+                  : '赤の − をタップで即カウントダウン。数字をタップで任意入力'}
               </p>
             </div>
 
@@ -157,100 +241,57 @@ export function Orders() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#2B5FA7' }}>
-                    flag 在庫
+                    flag
                   </th>
-                  <th className="w-24 px-3 py-3"></th>
+                  <th className="w-36 px-2 py-3 text-center">
+                    <div className="flex items-center gap-1 justify-center">
+                      <span className="text-xs text-danger font-semibold">−</span>
+                      <span className="text-xs text-muted font-semibold">/</span>
+                      <span className="text-xs text-ok font-semibold">＋</span>
+                    </div>
+                  </th>
                   <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#8A4AA6' }}>
-                    Lien 在庫
+                    Lien
                   </th>
-                  <th className="w-24 px-3 py-3"></th>
+                  <th className="w-36 px-2 py-3 text-center">
+                    <div className="flex items-center gap-1 justify-center">
+                      <span className="text-xs text-danger font-semibold">−</span>
+                      <span className="text-xs text-muted font-semibold">/</span>
+                      <span className="text-xs text-ok font-semibold">＋</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => {
-                  const flagS = getStock(p.id, 'flag')
-                  const lienS = getStock(p.id, 'lien')
-                  const flagActive = flagS?.active ?? true
-                  const lienActive = lienS?.active ?? true
-                  const flagStock = flagS?.currentStock ?? 0
-                  const lienStock = lienS?.currentStock ?? 0
-                  const flagLow = flagActive && flagS && flagS.currentStock <= flagS.minStock
-                  const lienLow = lienActive && lienS && lienS.currentStock <= lienS.minStock
-
-                  return (
-                    <tr key={p.id} className="border-b border-border hover:bg-bg transition-colors">
-                      <td className="px-4 py-3 font-semibold text-text">{p.name}</td>
-                      <td className="px-4 py-3 text-xs text-muted">{p.category}</td>
-
-                      {/* flag 在庫 */}
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${
-                        flagLow ? 'text-danger' : 'text-text'
-                      }`}>
-                        {flagActive
-                          ? flagStock
-                          : <span className="text-faint text-xs font-normal">取扱なし</span>
-                        }
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {flagActive && (
-                          <button
-                            onClick={() => openModal(p.id, p.name, 'flag')}
-                            className={`w-full px-2 py-1.5 rounded-md text-xs font-bold text-white transition-colors ${
-                              isReceive
-                                ? 'bg-ok hover:bg-ok/80'
-                                : 'bg-danger hover:bg-danger/80'
-                            }`}
-                          >
-                            {isReceive ? '＋ 仕入' : '－ 払出'}
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Lien 在庫 */}
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${
-                        lienLow ? 'text-danger' : 'text-text'
-                      }`}>
-                        {lienActive
-                          ? lienStock
-                          : <span className="text-faint text-xs font-normal">取扱なし</span>
-                        }
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {lienActive && (
-                          <button
-                            onClick={() => openModal(p.id, p.name, 'lien')}
-                            className={`w-full px-2 py-1.5 rounded-md text-xs font-bold text-white transition-colors ${
-                              isReceive
-                                ? 'bg-ok hover:bg-ok/80'
-                                : 'bg-danger hover:bg-danger/80'
-                            }`}
-                          >
-                            {isReceive ? '＋ 仕入' : '－ 払出'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {filtered.map((p) => (
+                  <tr key={p.id} className="border-b border-border hover:bg-bg transition-colors">
+                    <td className="px-4 py-2 font-semibold text-text">{p.name}</td>
+                    <td className="px-4 py-2 text-xs text-muted">{p.category}</td>
+                    <StoreCell productId={p.id} productName={p.name} storeId="flag" />
+                    <StoreCell productId={p.id} productName={p.name} storeId="lien" />
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </main>
       </div>
 
-      {/* 仕入/払出 入力モーダル */}
+      {/* 任意数入力モーダル */}
       {modal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-84 shadow-xl flex flex-col gap-4" style={{ width: '340px' }}>
+          <div className="bg-white rounded-xl p-6 shadow-xl flex flex-col gap-4" style={{ width: '340px' }}>
 
-            {/* ヘッダー */}
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <StoreDot store={modal.storeId} />
-                <span className="text-xs font-bold" style={{ color: modal.storeId === 'flag' ? '#2B5FA7' : '#8A4AA6' }}>
+                <span
+                  className="text-xs font-bold"
+                  style={{ color: modal.storeId === 'flag' ? '#2B5FA7' : '#8A4AA6' }}
+                >
                   {modal.storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}
                 </span>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ml-1 ${
                   isReceive ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger'
                 }`}>
                   {isReceive ? '↑ 仕入数' : '↓ 払出数'}
@@ -260,7 +301,6 @@ export function Orders() {
               <p className="text-xs text-muted mt-0.5">現在庫: {modal.currentStock} 個</p>
             </div>
 
-            {/* 数量ステッパー */}
             <div>
               <p className="text-xs font-semibold text-muted mb-2">
                 {isReceive ? '仕入数量' : '払出数量'}
@@ -286,10 +326,9 @@ export function Orders() {
               </div>
             </div>
 
-            {/* 変更後プレビュー */}
             <div className="bg-bg rounded-lg px-4 py-3">
               <p className="text-xs text-muted mb-1">変更後の在庫</p>
-              <p className="text-lg font-bold text-text">
+              <p className="text-lg font-bold">
                 {modal.currentStock}{' '}
                 <span className={isReceive ? 'text-ok' : 'text-danger'}>
                   {isReceive ? '＋' : '－'} {modal.quantity}
@@ -304,7 +343,6 @@ export function Orders() {
               </p>
             </div>
 
-            {/* ボタン */}
             <div className="flex gap-2">
               <Btn variant="ghost" className="flex-1" onClick={() => setModal(null)}>
                 キャンセル

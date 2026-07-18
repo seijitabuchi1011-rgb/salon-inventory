@@ -5,7 +5,7 @@ const NAV_ITEMS = [
   { path: '/scan', icon: '▦', label: 'スキャン' },
   { path: '/products', icon: '☰', label: '商品一覧' },
   { path: '/low-stock', icon: '⚠', label: '在庫不足' },
-  { path: '/orders', icon: '↧', label: '入荷・発注' },
+  { path: '/orders', icon: '↧', label: '仕入れ' },
   { path: '/stocktake', icon: '⊟', label: '棚卸' },
   { path: '/transfer', icon: '⇄', label: '店舗間移動' },
   { path: '/sales', icon: '▲', label: '販売実績' },
