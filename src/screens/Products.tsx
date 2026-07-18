@@ -1,10 +1,26 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Badge } from '../components/Badge'
 import { Btn } from '../components/Btn'
 import { useAppStore } from '../store'
+import type { Product, StoreStock } from '../types'
 
 const CATEGORIES = [
   'すべて',
@@ -20,12 +36,94 @@ function stockStatus(current: number, min: number): { label: string; variant: 'd
   return { label: '十分', variant: 'ok' }
 }
 
+function SortableRow({
+  p,
+  flagStock,
+  lienStock,
+  onNavigate,
+  onDelete,
+}: {
+  p: Product
+  flagStock: StoreStock | undefined
+  lienStock: StoreStock | undefined
+  onNavigate: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id })
+
+  const total = (flagStock?.currentStock ?? 0) + (lienStock?.currentStock ?? 0)
+  const totalMin = (flagStock?.minStock ?? 0) + (lienStock?.minStock ?? 0)
+  const status = stockStatus(total, totalMin)
+  const flagLow = flagStock && flagStock.currentStock <= flagStock.minStock
+  const lienLow = lienStock && lienStock.currentStock <= lienStock.minStock
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        background: isDragging ? '#F0F0EE' : undefined,
+      }}
+      className="border-b border-border hover:bg-bg transition-colors"
+    >
+      {/* ドラッグハンドル */}
+      <td className="px-2 py-3 w-8 text-center">
+        <button
+          {...attributes}
+          {...listeners}
+          className="text-faint hover:text-muted cursor-grab active:cursor-grabbing touch-manipulation select-none"
+          style={{ touchAction: 'none' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          ⠿
+        </button>
+      </td>
+      <td className="px-3 py-3 cursor-pointer" onClick={onNavigate}>
+        <div
+          className="w-10 h-10 rounded flex-shrink-0"
+          style={{ background: 'repeating-linear-gradient(45deg, #F1F1EE 0 4px, #E8E8E4 4px 8px)' }}
+        />
+      </td>
+      <td className="px-4 py-3 cursor-pointer" onClick={onNavigate}>
+        <div className="font-semibold text-text truncate max-w-xs">{p.name}</div>
+        <div className="text-2xs text-faint font-mono mt-0.5">{p.barcode}</div>
+      </td>
+      <td className="px-4 py-3 text-xs text-muted cursor-pointer" onClick={onNavigate}>{p.category}</td>
+      <td className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer ${flagLow ? 'text-danger' : 'text-text'}`} onClick={onNavigate}>
+        {flagStock?.currentStock ?? '—'}
+      </td>
+      <td className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer ${lienLow ? 'text-danger' : 'text-text'}`} onClick={onNavigate}>
+        {lienStock?.currentStock ?? '—'}
+      </td>
+      <td className="px-4 py-3 text-right font-bold tabular-nums cursor-pointer" onClick={onNavigate}>{total}</td>
+      <td className="px-4 py-3 text-center cursor-pointer" onClick={onNavigate}>
+        <Badge variant={status.variant}>{status.label}</Badge>
+      </td>
+      <td className="px-4 py-3 text-center">
+        <button
+          onClick={onDelete}
+          className="px-2 py-1 text-xs text-danger border border-danger rounded hover:bg-danger-soft transition-colors"
+        >
+          削除
+        </button>
+      </td>
+    </tr>
+  )
+}
+
 export function Products() {
   const navigate = useNavigate()
-  const { products, stocks, deleteProduct } = useAppStore()
+  const { products, stocks, deleteProduct, reorderProducts } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('すべて')
   const [confirmId, setConfirmId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  )
 
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
@@ -35,6 +133,13 @@ export function Products() {
 
   function getStock(productId: string, storeId: 'flag' | 'lien') {
     return stocks.find((s) => s.productId === productId && s.storeId === storeId)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      reorderProducts(String(active.id), String(over.id))
+    }
   }
 
   return (
@@ -81,7 +186,8 @@ export function Products() {
             <table className="w-full text-sm border-collapse">
               <thead className="bg-bg border-b border-border sticky top-0 z-10">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-12"></th>
+                  <th className="w-8"></th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-muted w-12"></th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">カテゴリ</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">flag</th>
@@ -91,56 +197,22 @@ export function Products() {
                   <th className="w-16"></th>
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map((p) => {
-                  const flagStock = getStock(p.id, 'flag')
-                  const lienStock = getStock(p.id, 'lien')
-                  const total = (flagStock?.currentStock ?? 0) + (lienStock?.currentStock ?? 0)
-                  const totalMin = (flagStock?.minStock ?? 0) + (lienStock?.minStock ?? 0)
-                  const status = stockStatus(total, totalMin)
-
-                  const flagLow = flagStock && flagStock.currentStock <= flagStock.minStock
-                  const lienLow = lienStock && lienStock.currentStock <= lienStock.minStock
-
-                  return (
-                    <tr
-                      key={p.id}
-                      className="border-b border-border hover:bg-bg cursor-pointer transition-colors"
-                      onClick={() => navigate(`/products/${p.id}`)}
-                    >
-                      <td className="px-4 py-3">
-                        <div
-                          className="w-10 h-10 rounded flex-shrink-0"
-                          style={{ background: 'repeating-linear-gradient(45deg, #F1F1EE 0 4px, #E8E8E4 4px 8px)' }}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-text truncate max-w-xs">{p.name}</div>
-                        <div className="text-2xs text-faint font-mono mt-0.5">{p.barcode}</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted">{p.category}</td>
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${flagLow ? 'text-danger' : 'text-text'}`}>
-                        {flagStock?.currentStock ?? '—'}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${lienLow ? 'text-danger' : 'text-text'}`}>
-                        {lienStock?.currentStock ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums">{total}</td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setConfirmId(p.id)}
-                          className="px-2 py-1 text-xs text-danger border border-danger rounded hover:bg-danger-soft transition-colors"
-                        >
-                          削除
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={filtered.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                  <tbody>
+                    {filtered.map((p) => (
+                      <SortableRow
+                        key={p.id}
+                        p={p}
+                        flagStock={getStock(p.id, 'flag')}
+                        lienStock={getStock(p.id, 'lien')}
+                        onNavigate={() => navigate(`/products/${p.id}`)}
+                        onDelete={() => setConfirmId(p.id)}
+                      />
+                    ))}
+                  </tbody>
+                </SortableContext>
+              </DndContext>
             </table>
           </div>
         </main>

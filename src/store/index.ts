@@ -10,6 +10,14 @@ interface AppState {
   upsertProduct: (product: Product) => void
   upsertStock: (stock: StoreStock) => void
   deleteProduct: (id: string) => void
+  reorderProducts: (activeId: string, overId: string) => void
+}
+
+function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  const result = [...arr]
+  const [item] = result.splice(from, 1)
+  result.splice(to, 0, item)
+  return result
 }
 
 const initialProducts: Product[] = [
@@ -19,26 +27,41 @@ const initialProducts: Product[] = [
   { id: '28', name: 'クレイブリーチ',      category: 'ブリーチ剤', maker: '',         barcode: '', purchasePrice: 2800, sellPrice: 3800 },
   { id: '29', name: 'アリミノ１２０',      category: 'ブリーチ剤', maker: 'アリミノ', barcode: '', purchasePrice: 2660, sellPrice: 3800 },
   { id: '30', name: 'ティントエスケープ',  category: 'ブリーチ剤', maker: '',         barcode: '', purchasePrice: 1400, sellPrice: 2000 },
+  // カラーオキシ
+  { id: '31', name: 'イルミナディベロッパー 1.5%',  category: 'カラーオキシ', maker: 'ウエラ',     barcode: '', purchasePrice:  960, sellPrice: 1200 },
+  { id: '32', name: 'イルミナディベロッパー 6%',    category: 'カラーオキシ', maker: 'ウエラ',     barcode: '', purchasePrice:  960, sellPrice: 1200 },
+  { id: '33', name: 'サスティノ 6%',               category: 'カラーオキシ', maker: 'デミ',       barcode: '', purchasePrice: 1040, sellPrice: 1600 },
+  { id: '34', name: 'オキシプレックス 6%',          category: 'カラーオキシ', maker: '',           barcode: '', purchasePrice:  600, sellPrice:  600 },
+  { id: '35', name: 'オキシプレックス 3%',          category: 'カラーオキシ', maker: '',           barcode: '', purchasePrice:  600, sellPrice:  600 },
+  { id: '36', name: 'フィヨーレオキシ 3%',          category: 'カラーオキシ', maker: 'フィヨーレ', barcode: '', purchasePrice:  828, sellPrice:    0 },
+  { id: '37', name: 'フィォーレ OX1.5% 2Lパウチ',  category: 'カラーオキシ', maker: 'フィヨーレ', barcode: '', purchasePrice:  828, sellPrice: 1500 },
+  { id: '38', name: 'ナカノオキシ 2%',              category: 'カラーオキシ', maker: 'ナカノ',     barcode: '', purchasePrice:  840, sellPrice: 1200 },
+  { id: '39', name: 'アジアンフェスオキシ 6%',      category: 'カラーオキシ', maker: 'ナプラ',     barcode: '', purchasePrice:  910, sellPrice:    0 },
+  { id: '40', name: 'アジアンフェスオキシ 2.8%',    category: 'カラーオキシ', maker: 'ナプラ',     barcode: '', purchasePrice:  910, sellPrice:    0 },
+  { id: '41', name: 'フィヨーレカラーオキシ AC 6%', category: 'カラーオキシ', maker: 'フィヨーレ', barcode: '', purchasePrice: 1380, sellPrice: 2000 },
+  { id: '42', name: 'フィヨーレカラーオキシ AC3%',  category: 'カラーオキシ', maker: 'フィヨーレ', barcode: '', purchasePrice: 1380, sellPrice: 2000 },
+  { id: '43', name: 'フィヨーレクリームオキシ 6%',  category: 'カラーオキシ', maker: 'フィヨーレ', barcode: '', purchasePrice: 1870, sellPrice: 2200 },
+  { id: '44', name: 'フィヨーレクリームオキシ 3%',  category: 'カラーオキシ', maker: 'フィヨーレ', barcode: '', purchasePrice: 1870, sellPrice: 2200 },
   // カラー剤
-  { id: '7',  name: 'キャラデコ',                                         category: 'カラー剤',      maker: 'ホーユー',       barcode: '', purchasePrice:  300, sellPrice:  600 },
-  { id: '8',  name: 'ライトニングブースター',                              category: 'カラー剤',      maker: 'シュワルツコフ',  barcode: '', purchasePrice: 1760, sellPrice:    0 },
-  { id: '9',  name: 'マテリア',                                           category: 'カラー剤',      maker: 'ミルボン',       barcode: '', purchasePrice:  455, sellPrice:  650 },
-  { id: '10', name: 'ピクサムPYR',                                        category: 'カラー剤',      maker: 'ウエラ',         barcode: '', purchasePrice:  508, sellPrice:    0 },
-  { id: '11', name: 'イゴラ ロイヤル ピクサム-F ピラミンゴ カラー',       category: 'カラー剤',      maker: 'シュワルツコフ',  barcode: '', purchasePrice:  508, sellPrice:    0 },
-  { id: '12', name: 'イゴラペンタ',                                       category: 'カラー剤',      maker: 'シュワルツコフ',  barcode: '', purchasePrice:  508, sellPrice:  700 },
-  { id: '13', name: 'イルミナ',                                           category: 'カラー剤',      maker: 'ウエラ',         barcode: '', purchasePrice:  680, sellPrice:  800 },
-  { id: '14', name: 'サスティノ',                                         category: 'カラー剤',      maker: 'デミ',           barcode: '', purchasePrice:  422, sellPrice:  650 },
-  { id: '15', name: 'アディクシー',                                       category: 'カラー剤',      maker: 'ミルボン',       barcode: '', purchasePrice:  508, sellPrice:  700 },
-  { id: '16', name: 'カラーミューズ',                                     category: 'カラー剤',      maker: 'ウエラ',         barcode: '', purchasePrice: 1705, sellPrice: 2200 },
-  { id: '17', name: 'アジアン',                                           category: 'カラー剤',      maker: 'ナプラ',         barcode: '', purchasePrice:  455, sellPrice:  650 },
-  { id: '18', name: 'コレストン',                                         category: 'カラー剤',      maker: 'ウエラ',         barcode: '', purchasePrice:  581, sellPrice:  750 },
-  { id: '19', name: 'フィヨーレ',                                         category: 'カラー剤',      maker: 'フィヨーレ',     barcode: '', purchasePrice:  418, sellPrice:  870 },
-  { id: '20', name: 'アルティスト',                                       category: 'カラー剤',      maker: 'ミルボン',       barcode: '', purchasePrice:  543, sellPrice:  700 },
-  { id: '21', name: 'エドル',                                             category: 'カラー剤',      maker: 'ミルボン',       barcode: '', purchasePrice:  490, sellPrice:    0 },
-  { id: '22', name: 'アルーリア',                                         category: 'カラー剤',      maker: 'ロレアル',       barcode: '', purchasePrice:  605, sellPrice:    0 },
-  { id: '23', name: 'Nドットルフレ',                                      category: 'カラー剤',      maker: 'ナプラ',         barcode: '', purchasePrice:  390, sellPrice:  650 },
-  { id: '24', name: 'パイモアスペクトラムカラーズ',                        category: 'カラー剤',      maker: 'パイモア',       barcode: '', purchasePrice: 1404, sellPrice: 1755 },
-  { id: '25', name: 'クリエイティブフェリエネオ',                          category: 'カラー剤',      maker: 'ロレアル',       barcode: '', purchasePrice:  503, sellPrice:    0 },
+  { id: '7',  name: 'キャラデコ',                                         category: 'カラー剤', maker: 'ホーユー',      barcode: '', purchasePrice:  300, sellPrice:  600 },
+  { id: '8',  name: 'ライトニングブースター',                              category: 'カラー剤', maker: 'シュワルツコフ', barcode: '', purchasePrice: 1760, sellPrice:    0 },
+  { id: '9',  name: 'マテリア',                                           category: 'カラー剤', maker: 'ミルボン',      barcode: '', purchasePrice:  455, sellPrice:  650 },
+  { id: '10', name: 'ピクサムPYR',                                        category: 'カラー剤', maker: 'ウエラ',        barcode: '', purchasePrice:  508, sellPrice:    0 },
+  { id: '11', name: 'イゴラ ロイヤル ピクサム-F ピラミンゴ カラー',       category: 'カラー剤', maker: 'シュワルツコフ', barcode: '', purchasePrice:  508, sellPrice:    0 },
+  { id: '12', name: 'イゴラペンタ',                                       category: 'カラー剤', maker: 'シュワルツコフ', barcode: '', purchasePrice:  508, sellPrice:  700 },
+  { id: '13', name: 'イルミナ',                                           category: 'カラー剤', maker: 'ウエラ',        barcode: '', purchasePrice:  680, sellPrice:  800 },
+  { id: '14', name: 'サスティノ',                                         category: 'カラー剤', maker: 'デミ',          barcode: '', purchasePrice:  422, sellPrice:  650 },
+  { id: '15', name: 'アディクシー',                                       category: 'カラー剤', maker: 'ミルボン',      barcode: '', purchasePrice:  508, sellPrice:  700 },
+  { id: '16', name: 'カラーミューズ',                                     category: 'カラー剤', maker: 'ウエラ',        barcode: '', purchasePrice: 1705, sellPrice: 2200 },
+  { id: '17', name: 'アジアン',                                           category: 'カラー剤', maker: 'ナプラ',        barcode: '', purchasePrice:  455, sellPrice:  650 },
+  { id: '18', name: 'コレストン',                                         category: 'カラー剤', maker: 'ウエラ',        barcode: '', purchasePrice:  581, sellPrice:  750 },
+  { id: '19', name: 'フィヨーレ',                                         category: 'カラー剤', maker: 'フィヨーレ',    barcode: '', purchasePrice:  418, sellPrice:  870 },
+  { id: '20', name: 'アルティスト',                                       category: 'カラー剤', maker: 'ミルボン',      barcode: '', purchasePrice:  543, sellPrice:  700 },
+  { id: '21', name: 'エドル',                                             category: 'カラー剤', maker: 'ミルボン',      barcode: '', purchasePrice:  490, sellPrice:    0 },
+  { id: '22', name: 'アルーリア',                                         category: 'カラー剤', maker: 'ロレアル',      barcode: '', purchasePrice:  605, sellPrice:    0 },
+  { id: '23', name: 'Nドットルフレ',                                      category: 'カラー剤', maker: 'ナプラ',        barcode: '', purchasePrice:  390, sellPrice:  650 },
+  { id: '24', name: 'パイモアスペクトラムカラーズ',                        category: 'カラー剤', maker: 'パイモア',      barcode: '', purchasePrice: 1404, sellPrice: 1755 },
+  { id: '25', name: 'クリエイティブフェリエネオ',                          category: 'カラー剤', maker: 'ロレアル',      barcode: '', purchasePrice:  503, sellPrice:    0 },
 ]
 
 const initialStocks: StoreStock[] = [
@@ -53,6 +76,35 @@ const initialStocks: StoreStock[] = [
   { productId: '29', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
   { productId: '30', storeId: 'flag', currentStock: 1, minStock: 1, active: true },
   { productId: '30', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  // カラーオキシ
+  { productId: '31', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '31', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '32', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '32', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '33', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '33', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '34', storeId: 'flag', currentStock: 6, minStock: 3, active: true },
+  { productId: '34', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '35', storeId: 'flag', currentStock: 3, minStock: 2, active: true },
+  { productId: '35', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '36', storeId: 'flag', currentStock: 1, minStock: 1, active: true },
+  { productId: '36', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '37', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '37', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '38', storeId: 'flag', currentStock: 3, minStock: 2, active: true },
+  { productId: '38', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '39', storeId: 'flag', currentStock: 4, minStock: 2, active: true },
+  { productId: '39', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '40', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '40', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '41', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '41', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '42', storeId: 'flag', currentStock: 1, minStock: 1, active: true },
+  { productId: '42', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '43', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '43', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
+  { productId: '44', storeId: 'flag', currentStock: 2, minStock: 2, active: true },
+  { productId: '44', storeId: 'lien', currentStock: 0, minStock: 1, active: true },
   // カラー剤
   { productId: '7',  storeId: 'flag', currentStock:  46, minStock: 10, active: true },
   { productId: '7',  storeId: 'lien', currentStock:   0, minStock:  5, active: true },
@@ -128,21 +180,27 @@ export const useAppStore = create<AppState>()(
           products: state.products.filter((p) => p.id !== id),
           stocks: state.stocks.filter((s) => s.productId !== id),
         })),
+      reorderProducts: (activeId, overId) =>
+        set((state) => {
+          const from = state.products.findIndex((p) => p.id === activeId)
+          const to = state.products.findIndex((p) => p.id === overId)
+          if (from === -1 || to === -1 || from === to) return state
+          return { products: moveItem(state.products, from, to) }
+        }),
     }),
     {
       name: 'salon-inventory-store',
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
       }),
-      // version 0 → 1: ブリーチ剤5種など initialProducts にある未保存商品を追加
       migrate: (persistedState, fromVersion) => {
         const saved = persistedState as { products?: Product[]; stocks?: StoreStock[] }
         const products = saved.products ?? []
         const stocks = saved.stocks ?? []
 
-        if (fromVersion < 1) {
+        if (fromVersion < 2) {
           const newProducts = initialProducts.filter((ip) => !products.some((p) => p.id === ip.id))
           const newStocks = initialStocks.filter(
             (is) => !stocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
