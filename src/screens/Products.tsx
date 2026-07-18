@@ -173,7 +173,7 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { products, stocks, upsertStock, deleteProduct, reorderProducts, bulkUpdateCategory } = useAppStore()
+  const { currentStore, products, stocks, upsertStock, deleteProduct, reorderProducts, bulkUpdateCategory } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
@@ -190,7 +190,10 @@ export function Products() {
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
     const matchCat = category === 'すべて' || p.category === category
-    return matchSearch && matchCat
+    const matchStore =
+      currentStore === 'all' ||
+      (stocks.find((s) => s.productId === p.id && s.storeId === currentStore)?.active ?? true)
+    return matchSearch && matchCat && matchStore
   })
 
   const allChecked = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id))

@@ -2,18 +2,12 @@ import { useNavigate } from 'react-router-dom'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Card } from '../components/Card'
-
-const KPI_CARDS = [
-  { label: '在庫不足', value: '12', sub: '要発注 5', color: 'text-danger' },
-  { label: '入荷待ち', value: '3', sub: '本日到着 1', color: 'text-warn' },
-  { label: '今月販売', value: '286', sub: '前月比 +8%', color: 'text-ok' },
-  { label: '棚卸進捗', value: '68%', sub: 'flag店', color: 'text-accent' },
-]
+import { useAppStore } from '../store'
 
 const TILES = [
   { icon: '▦', label: 'バーコード読み取り', path: '/scan', primary: true, badge: null },
   { icon: '☰', label: '商品一覧', path: '/products', primary: false, badge: null },
-  { icon: '⚠', label: '在庫不足', path: '/low-stock', primary: false, badge: '12' },
+  { icon: '⚠', label: '在庫不足', path: '/low-stock', primary: false, badge: null },
   { icon: '↧', label: '入荷・発注', path: '/orders', primary: false, badge: null },
   { icon: '⊟', label: '棚卸', path: '/stocktake', primary: false, badge: null },
   { icon: '⇄', label: '店舗間移動', path: '/transfer', primary: false, badge: null },
@@ -24,7 +18,84 @@ const TILES = [
 
 export function Home() {
   const navigate = useNavigate()
+  const { currentStore, products, stocks } = useAppStore()
   const today = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
+
+  const storeLabel =
+    currentStore === 'flag' ? 'flag美容室' :
+    currentStore === 'lien' ? 'Lien美容室' : '全店'
+
+  // 在庫不足カウント
+  const lowStockCount = products.filter((p) => {
+    if (currentStore === 'flag' || currentStore === 'all') {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
+      if (s && s.active !== false && s.currentStock <= s.minStock) return true
+    }
+    if (currentStore === 'lien' || currentStore === 'all') {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
+      if (s && s.active !== false && s.currentStock <= s.minStock) return true
+    }
+    return false
+  }).length
+
+  // 緊急（在庫0）カウント
+  const urgentCount = products.filter((p) => {
+    if (currentStore === 'flag' || currentStore === 'all') {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
+      if (s && s.active !== false && s.currentStock === 0) return true
+    }
+    if (currentStore === 'lien' || currentStore === 'all') {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
+      if (s && s.active !== false && s.currentStock === 0) return true
+    }
+    return false
+  }).length
+
+  // 取扱商品数
+  const activeProductCount = products.filter((p) => {
+    if (currentStore === 'flag') {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
+      return s?.active !== false
+    }
+    if (currentStore === 'lien') {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
+      return s?.active !== false
+    }
+    return true
+  }).length
+
+  const kpiCards = [
+    {
+      label: '在庫不足',
+      value: String(lowStockCount),
+      sub: urgentCount > 0 ? `緊急 ${urgentCount}件` : '緊急なし',
+      color: lowStockCount > 0 ? 'text-danger' : 'text-ok',
+      path: '/low-stock',
+    },
+    {
+      label: '取扱商品数',
+      value: String(activeProductCount),
+      sub: storeLabel,
+      color: 'text-accent',
+      path: '/products',
+    },
+    {
+      label: '入荷待ち',
+      value: '—',
+      sub: '発注管理で確認',
+      color: 'text-warn',
+      path: '/orders',
+    },
+    {
+      label: '棚卸進捗',
+      value: '—',
+      sub: '棚卸で開始',
+      color: 'text-muted',
+      path: '/stocktake',
+    },
+  ]
+
+  const lowBadge = lowStockCount > 0 ? String(lowStockCount) : null
 
   return (
     <div className="flex flex-col h-full">
@@ -35,44 +106,56 @@ export function Home() {
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
         <main className="flex-1 overflow-y-auto p-6 bg-bg">
-          {/* 挨拶 */}
           <div className="mb-4">
             <p className="text-2xs text-faint">{today}</p>
             <h1 className="text-2xl font-bold text-text">おはようございます</h1>
+            <p className="text-sm text-muted mt-1">
+              表示中:{' '}
+              <span className={`font-bold ${currentStore === 'flag' ? 'text-[#1B5EB8]' : currentStore === 'lien' ? 'text-[#7B2FA8]' : 'text-text'}`}>
+                {storeLabel}
+              </span>
+            </p>
           </div>
 
-          {/* KPI カード */}
           <div className="grid grid-cols-4 gap-3 mb-5">
-            {KPI_CARDS.map((k) => (
-              <Card key={k.label} className="flex flex-col gap-1">
-                <span className="text-xs text-muted font-semibold">{k.label}</span>
-                <span className={`text-4xl font-bold tracking-tight ${k.color}`}>{k.value}</span>
-                <span className="text-xs text-faint">{k.sub}</span>
-              </Card>
-            ))}
-          </div>
-
-          {/* アクションタイル */}
-          <div className="grid grid-cols-3 gap-3">
-            {TILES.map((tile) => (
+            {kpiCards.map((k) => (
               <button
-                key={tile.path}
-                onClick={() => navigate(tile.path)}
-                className={`relative flex flex-col items-center justify-center min-h-[108px] rounded-lg gap-2 transition-opacity active:opacity-80 ${
-                  tile.primary
-                    ? 'bg-text text-white'
-                    : 'bg-surface border border-border text-text hover:bg-bg'
-                }`}
+                key={k.label}
+                onClick={() => navigate(k.path)}
+                className="text-left active:opacity-80 transition-opacity"
               >
-                <span className="text-2xl leading-none">{tile.icon}</span>
-                <span className="text-sm font-semibold">{tile.label}</span>
-                {tile.badge && (
-                  <span className="absolute top-2 right-2 bg-danger text-white text-2xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {tile.badge}
-                  </span>
-                )}
+                <Card className="flex flex-col gap-1 h-full">
+                  <span className="text-xs text-muted font-semibold">{k.label}</span>
+                  <span className={`text-4xl font-bold tracking-tight ${k.color}`}>{k.value}</span>
+                  <span className="text-xs text-faint">{k.sub}</span>
+                </Card>
               </button>
             ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {TILES.map((tile) => {
+              const badge = tile.path === '/low-stock' ? lowBadge : tile.badge
+              return (
+                <button
+                  key={tile.path}
+                  onClick={() => navigate(tile.path)}
+                  className={`relative flex flex-col items-center justify-center min-h-[108px] rounded-lg gap-2 transition-opacity active:opacity-80 ${
+                    tile.primary
+                      ? 'bg-text text-white'
+                      : 'bg-surface border border-border text-text hover:bg-bg'
+                  }`}
+                >
+                  <span className="text-2xl leading-none">{tile.icon}</span>
+                  <span className="text-sm font-semibold">{tile.label}</span>
+                  {badge && (
+                    <span className="absolute top-2 right-2 bg-danger text-white text-2xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </main>
       </div>
