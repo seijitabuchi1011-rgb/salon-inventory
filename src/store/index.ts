@@ -12,6 +12,11 @@ interface AppState {
   deleteProduct: (id: string) => void
   reorderProducts: (activeId: string, overId: string) => void
   bulkUpdateCategory: (ids: string[], category: string) => void
+  bulkUpdateStocks: (
+    ids: string[],
+    flagPatch: Partial<Pick<StoreStock, 'active' | 'minStock'>> | null,
+    lienPatch: Partial<Pick<StoreStock, 'active' | 'minStock'>> | null,
+  ) => void
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -845,6 +850,25 @@ export const useAppStore = create<AppState>()(
             ids.includes(p.id) ? { ...p, category } : p
           ),
         })),
+      bulkUpdateStocks: (ids, flagPatch, lienPatch) =>
+        set((state) => {
+          const updated = state.stocks.map((s) => {
+            if (!ids.includes(s.productId)) return s
+            if (s.storeId === 'flag' && flagPatch) return { ...s, ...flagPatch }
+            if (s.storeId === 'lien' && lienPatch) return { ...s, ...lienPatch }
+            return s
+          })
+          const extra: StoreStock[] = []
+          ids.forEach((id) => {
+            if (flagPatch && !updated.some((s) => s.productId === id && s.storeId === 'flag')) {
+              extra.push({ productId: id, storeId: 'flag', currentStock: 0, minStock: flagPatch.minStock ?? 3, active: flagPatch.active ?? true })
+            }
+            if (lienPatch && !updated.some((s) => s.productId === id && s.storeId === 'lien')) {
+              extra.push({ productId: id, storeId: 'lien', currentStock: 0, minStock: lienPatch.minStock ?? 3, active: lienPatch.active ?? true })
+            }
+          })
+          return { stocks: [...updated, ...extra] }
+        }),
     }),
     {
       name: 'salon-inventory-store',

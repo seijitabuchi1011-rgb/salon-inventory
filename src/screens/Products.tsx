@@ -133,14 +133,19 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { products, stocks, deleteProduct, reorderProducts, bulkUpdateCategory } = useAppStore()
+  const { products, stocks, deleteProduct, reorderProducts, bulkUpdateCategory, bulkUpdateStocks } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
   )
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkTab, setBulkTab] = useState<'category' | 'store'>('category')
   const [bulkCategory, setBulkCategory] = useState('')
+  const [bulkFlagActive, setBulkFlagActive] = useState<'' | 'true' | 'false'>('')
+  const [bulkLienActive, setBulkLienActive] = useState<'' | 'true' | 'false'>('')
+  const [bulkFlagMin, setBulkFlagMin] = useState('')
+  const [bulkLienMin, setBulkLienMin] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -180,11 +185,33 @@ export function Products() {
     })
   }
 
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setBulkCategory('')
+    setBulkFlagActive('')
+    setBulkLienActive('')
+    setBulkFlagMin('')
+    setBulkLienMin('')
+  }
+
   function applyBulkCategory() {
     if (!bulkCategory || selectedIds.size === 0) return
     bulkUpdateCategory([...selectedIds], bulkCategory)
-    setSelectedIds(new Set())
-    setBulkCategory('')
+    clearSelection()
+  }
+
+  function applyBulkStore() {
+    const flagPatch: Partial<Pick<{ active: boolean; minStock: number }, 'active' | 'minStock'>> = {}
+    if (bulkFlagActive !== '') flagPatch.active = bulkFlagActive === 'true'
+    if (bulkFlagMin !== '') flagPatch.minStock = Number(bulkFlagMin)
+    const lienPatch: Partial<Pick<{ active: boolean; minStock: number }, 'active' | 'minStock'>> = {}
+    if (bulkLienActive !== '') lienPatch.active = bulkLienActive === 'true'
+    if (bulkLienMin !== '') lienPatch.minStock = Number(bulkLienMin)
+    const hasFlagChange = Object.keys(flagPatch).length > 0
+    const hasLienChange = Object.keys(lienPatch).length > 0
+    if (!hasFlagChange && !hasLienChange) return
+    bulkUpdateStocks([...selectedIds], hasFlagChange ? flagPatch : null, hasLienChange ? lienPatch : null)
+    clearSelection()
   }
 
   function getStock(productId: string, storeId: 'flag' | 'lien') {
@@ -290,34 +317,113 @@ export function Products() {
         </main>
       </div>
 
-      {/* 一括カテゴリ変更バー */}
+      {/* 一括操作バー */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-lg px-6 py-3 flex items-center gap-3">
-          <span className="text-sm font-bold text-accent flex-shrink-0">{selectedIds.size}件 選択中</span>
-          <span className="text-xs text-muted flex-shrink-0">カテゴリを変更:</span>
-          <select
-            value={bulkCategory}
-            onChange={(e) => setBulkCategory(e.target.value)}
-            className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
-          >
-            <option value="">カテゴリを選択</option>
-            {MOVE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          <button
-            onClick={applyBulkCategory}
-            disabled={!bulkCategory}
-            className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
-          >
-            移動
-          </button>
-          <button
-            onClick={() => { setSelectedIds(new Set()); setBulkCategory('') }}
-            className="px-4 h-9 rounded-md border border-border text-sm text-muted flex-shrink-0"
-          >
-            キャンセル
-          </button>
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-lg px-4 py-3 flex flex-col gap-2">
+          {/* タブ行 */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-bold text-accent flex-shrink-0">{selectedIds.size}件 選択中</span>
+            <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
+              <button
+                onClick={() => setBulkTab('category')}
+                className={`px-3 py-1.5 transition-colors ${bulkTab === 'category' ? 'bg-accent text-white' : 'text-muted hover:bg-bg'}`}
+              >
+                カテゴリ変更
+              </button>
+              <button
+                onClick={() => setBulkTab('store')}
+                className={`px-3 py-1.5 border-l border-border transition-colors ${bulkTab === 'store' ? 'bg-accent text-white' : 'text-muted hover:bg-bg'}`}
+              >
+                店舗設定
+              </button>
+            </div>
+            <button onClick={clearSelection} className="ml-auto px-3 h-8 rounded-md border border-border text-xs text-muted flex-shrink-0">
+              キャンセル
+            </button>
+          </div>
+
+          {/* カテゴリ変更パネル */}
+          {bulkTab === 'category' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted flex-shrink-0">移動先カテゴリ:</span>
+              <select
+                value={bulkCategory}
+                onChange={(e) => setBulkCategory(e.target.value)}
+                className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
+              >
+                <option value="">カテゴリを選択</option>
+                {MOVE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <button
+                onClick={applyBulkCategory}
+                disabled={!bulkCategory}
+                className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
+              >
+                移動
+              </button>
+            </div>
+          )}
+
+          {/* 店舗設定パネル */}
+          {bulkTab === 'store' && (
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* flag */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-[#E6EEF9]">
+                <span className="text-xs font-bold text-[#1B5EB8] flex-shrink-0">flag</span>
+                <span className="text-xs text-muted flex-shrink-0">取扱:</span>
+                <select
+                  value={bulkFlagActive}
+                  onChange={(e) => setBulkFlagActive(e.target.value as '' | 'true' | 'false')}
+                  className="h-8 border border-[#BFD3EC] rounded px-2 text-xs bg-white text-text outline-none"
+                >
+                  <option value="">変更しない</option>
+                  <option value="true">取扱あり ✓</option>
+                  <option value="false">取扱なし ✗</option>
+                </select>
+                <span className="text-xs text-muted flex-shrink-0">下限:</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={bulkFlagMin}
+                  onChange={(e) => setBulkFlagMin(e.target.value)}
+                  placeholder="—"
+                  className="w-14 h-8 border border-[#BFD3EC] rounded px-2 text-xs bg-white text-text outline-none text-center"
+                />
+              </div>
+              {/* Lien */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-[#F1E8F5]">
+                <span className="text-xs font-bold text-[#7B2FA8] flex-shrink-0">Lien</span>
+                <span className="text-xs text-muted flex-shrink-0">取扱:</span>
+                <select
+                  value={bulkLienActive}
+                  onChange={(e) => setBulkLienActive(e.target.value as '' | 'true' | 'false')}
+                  className="h-8 border border-[#DDC3E6] rounded px-2 text-xs bg-white text-text outline-none"
+                >
+                  <option value="">変更しない</option>
+                  <option value="true">取扱あり ✓</option>
+                  <option value="false">取扱なし ✗</option>
+                </select>
+                <span className="text-xs text-muted flex-shrink-0">下限:</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={bulkLienMin}
+                  onChange={(e) => setBulkLienMin(e.target.value)}
+                  placeholder="—"
+                  className="w-14 h-8 border border-[#DDC3E6] rounded px-2 text-xs bg-white text-text outline-none text-center"
+                />
+              </div>
+              <button
+                onClick={applyBulkStore}
+                disabled={!bulkFlagActive && !bulkLienActive && !bulkFlagMin && !bulkLienMin}
+                className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
+              >
+                適用
+              </button>
+            </div>
+          )}
         </div>
       )}
 
