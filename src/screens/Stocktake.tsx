@@ -9,17 +9,27 @@ import { useAppStore } from '../store'
 
 type StoreTab = 'flag' | 'lien'
 type ItemStatus = '未確認' | '確認済' | '差異'
-type FilterType = 'すべて' | '未確認' | '確認済' | '差異'
+type StatusFilter = 'すべて' | '未確認' | '確認済' | '差異'
 
 const STATUS_VARIANT: Record<ItemStatus, 'muted' | 'ok' | 'danger'> = {
   未確認: 'muted', 確認済: 'ok', 差異: 'danger',
 }
 
+const CATEGORIES = [
+  'すべて',
+  'カラー剤', 'ブリーチ剤', 'カラーオキシ',
+  'パーマ剤', 'プレックス剤', '髪ドラ',
+  'oggi otto', 'H2', '処理剤', '小物類',
+  'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
+]
+
 export function Stocktake() {
   const { products, stocks, upsertStock } = useAppStore()
   const [store, setStore] = useState<StoreTab>('flag')
-  const [filter, setFilter] = useState<FilterType>('すべて')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('すべて')
+  const [category, setCategory] = useState('すべて')
   const [modal, setModal] = useState<{ productId: string; inputQty: number } | null>(null)
+  const [showCompleteModal, setShowCompleteModal] = useState(false)
 
   // 棚卸開始時の在庫スナップショット（このセッション中は変わらない）
   const [theoretical] = useState<Record<string, Record<string, number>>>(() => {
@@ -39,7 +49,7 @@ export function Stocktake() {
 
   const month = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
 
-  // 選択店舗でアクティブな商品一覧を組み立て
+  // 選択店舗でアクティブな商品一覧
   const items = products
     .map((p) => {
       const s = stocks.find((st) => st.productId === p.id && st.storeId === store)
@@ -69,9 +79,11 @@ export function Stocktake() {
     item.actual !== null ? sum + item.actual * item.purchasePrice : sum, 0
   )
 
-  const filtered = items.filter((item) =>
-    filter === 'すべて' ? true : item.status === filter
-  )
+  const filtered = items.filter((item) => {
+    const matchStatus = statusFilter === 'すべて' || item.status === statusFilter
+    const matchCat = category === 'すべて' || item.category === category
+    return matchStatus && matchCat
+  })
 
   const modalItem = modal ? items.find((i) => i.productId === modal.productId) : null
 
@@ -86,7 +98,6 @@ export function Stocktake() {
       ...prev,
       [store]: { ...prev[store], [modal.productId]: qty },
     }))
-    // 実棚数を在庫に反映
     const s = stocks.find((s) => s.productId === modal.productId && s.storeId === store)
     upsertStock({
       productId: modal.productId,
@@ -96,6 +107,14 @@ export function Stocktake() {
       active: s?.active ?? true,
     })
     setModal(null)
+  }
+
+  function completeStocktake() {
+    // このセッションのカウントをリセットして次回棚卸を新しく始められるようにする
+    setActualCounts((prev) => ({ ...prev, [store]: {} }))
+    setShowCompleteModal(false)
+    setStatusFilter('すべて')
+    setCategory('すべて')
   }
 
   function exportCsv() {
@@ -127,11 +146,12 @@ export function Stocktake() {
 
           {/* ヘッダー */}
           <div className="px-6 pt-5 pb-4 bg-surface border-b border-border">
+            {/* 店舗タブ＋ボタン行 */}
             <div className="flex gap-2 mb-4">
               {(['flag', 'lien'] as StoreTab[]).map((s) => (
                 <button
                   key={s}
-                  onClick={() => { setStore(s); setFilter('すべて') }}
+                  onClick={() => { setStore(s); setStatusFilter('すべて'); setCategory('すべて') }}
                   className={`flex items-center gap-2 px-4 h-9 rounded-lg text-sm font-bold border transition-colors ${
                     store === s
                       ? s === 'flag' ? 'bg-flag-soft text-flag border-flag' : 'bg-lien-soft text-lien border-lien'
@@ -144,7 +164,14 @@ export function Stocktake() {
               ))}
               <div className="flex-1" />
               <Btn variant="ghost" size="sm" onClick={exportCsv}>CSVエクスポート</Btn>
-              <Btn variant="primary" size="sm" disabled={confirmed === 0}>棚卸を完了</Btn>
+              <Btn
+                variant="primary"
+                size="sm"
+                disabled={confirmed === 0}
+                onClick={() => setShowCompleteModal(true)}
+              >
+                棚卸を完了
+              </Btn>
             </div>
 
             {/* サマリーカード */}
@@ -178,20 +205,36 @@ export function Stocktake() {
               </Card>
             </div>
 
-            <div className="h-2 bg-bg rounded-full overflow-hidden mb-4">
+            <div className="h-2 bg-bg rounded-full overflow-hidden mb-3">
               <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${progress}%` }} />
             </div>
 
-            <div className="flex gap-2 overflow-x-auto">
-              {(['すべて', '未確認', '確認済', '差異'] as FilterType[]).map((f) => (
+            {/* ステータスフィルター */}
+            <div className="flex gap-2 overflow-x-auto mb-2">
+              {(['すべて', '未確認', '確認済', '差異'] as StatusFilter[]).map((f) => (
                 <button
                   key={f}
-                  onClick={() => setFilter(f)}
+                  onClick={() => setStatusFilter(f)}
                   className={`flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold transition-colors ${
-                    filter === f ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'
+                    statusFilter === f ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'
                   }`}
                 >
                   {f}
+                </button>
+              ))}
+            </div>
+
+            {/* カテゴリフィルター */}
+            <div className="flex gap-2 overflow-x-auto">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setCategory(cat)}
+                  className={`flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold transition-colors ${
+                    category === cat ? 'bg-text text-white' : 'bg-bg text-muted border border-border'
+                  }`}
+                >
+                  {cat}
                 </button>
               ))}
               <span className="ml-auto text-xs text-faint flex-shrink-0 self-center">{filtered.length} 商品</span>
@@ -205,6 +248,10 @@ export function Stocktake() {
                 <span className="text-5xl">📦</span>
                 <p className="text-base font-semibold">取扱商品がありません</p>
                 <p className="text-xs text-faint">商品一覧で {store === 'flag' ? 'flag' : 'Lien'} の取扱をONにしてください</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted gap-2">
+                <p className="text-sm">該当する商品がありません</p>
               </div>
             ) : (
               <table className="w-full text-sm border-collapse">
@@ -231,7 +278,7 @@ export function Stocktake() {
                         <td className="px-4 py-3 font-semibold text-text">{item.name}</td>
                         <td className="px-4 py-3 text-xs text-muted">{item.category}</td>
                         <td className="px-4 py-3 text-right text-muted tabular-nums">
-                          ¥{item.purchasePrice.toLocaleString()}
+                          {item.purchasePrice > 0 ? `¥${item.purchasePrice.toLocaleString()}` : '—'}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">{item.theoretical}</td>
                         <td className="px-4 py-3 text-right font-bold tabular-nums">
@@ -304,6 +351,51 @@ export function Stocktake() {
             <div className="flex gap-2">
               <Btn variant="ghost" className="flex-1" onClick={() => setModal(null)}>キャンセル</Btn>
               <Btn variant="primary" className="flex-[2]" onClick={confirmInput}>✓ 確定</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 棚卸完了確認モーダル */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-96 shadow-xl flex flex-col gap-4">
+            <div>
+              <p className="text-lg font-bold text-text">棚卸を完了しますか？</p>
+              <p className="text-xs text-muted mt-1">
+                {store === 'flag' ? 'flag 美容室' : 'Lien 美容室'} · {month}
+              </p>
+            </div>
+
+            {/* サマリー */}
+            <div className="bg-bg rounded-lg p-4 flex flex-col gap-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted">確認済</span>
+                <span className="font-bold text-ok">{confirmed} 商品</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted">未確認</span>
+                <span className="font-bold text-text">{items.length - confirmed} 商品</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted">差異あり</span>
+                <span className={`font-bold ${diffCount > 0 ? 'text-danger' : 'text-muted'}`}>{diffCount} 商品</span>
+              </div>
+              <div className="border-t border-border mt-1 pt-2 flex justify-between text-sm">
+                <span className="text-muted">在庫合計金額</span>
+                <span className="font-bold text-text">¥{totalValue.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {items.length - confirmed > 0 && (
+              <p className="text-xs text-warn">
+                ※ 未確認の商品が {items.length - confirmed} 件あります。完了すると今回のカウントがリセットされます。
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <Btn variant="ghost" className="flex-1" onClick={() => setShowCompleteModal(false)}>キャンセル</Btn>
+              <Btn variant="primary" className="flex-[2]" onClick={completeStocktake}>✓ 完了する</Btn>
             </div>
           </div>
         </div>
