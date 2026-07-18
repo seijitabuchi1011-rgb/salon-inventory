@@ -9,10 +9,11 @@ const TILES = [
   { icon: '☰', label: '商品一覧', path: '/products', primary: false, badge: null },
   { icon: '⚠', label: '在庫不足', path: '/low-stock', primary: false, badge: null },
   { icon: '↧', label: '仕入れ', path: '/orders', primary: false, badge: null },
+  { icon: '¥', label: '今月仕入高', path: '/monthly-purchases', primary: false, badge: null },
   { icon: '⊟', label: '棚卸', path: '/stocktake', primary: false, badge: null },
   { icon: '⇄', label: '店舗間移動', path: '/transfer', primary: false, badge: null },
   { icon: '▲', label: '販売実績', path: '/sales', primary: false, badge: null },
-  { icon: '◉', label: 'スタッフ実績', path: '/staff', primary: false, badge: null },
+  { icon: '◉', label: 'スタッフ購入履歴', path: '/staff', primary: false, badge: null },
   { icon: '＋', label: '商品登録', path: '/products/new', primary: false, badge: null },
 ]
 

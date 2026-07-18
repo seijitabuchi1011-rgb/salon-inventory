@@ -9,8 +9,22 @@ export interface Product {
   barcode: string
   purchasePrice: number
   sellPrice: number
+  taxRate?: 8 | 10
   image?: string
   memo?: string
+}
+
+export interface StaffPurchase {
+  id: string
+  date: string
+  productId: string
+  quantity: number
+  sellPriceAtPurchase: number
+  taxRate: 8 | 10
+  purchasedBy: string
+  recordedBy: string
+  storeId: StoreId
+  timestamp: number
 }
 
 export interface StoreStock {

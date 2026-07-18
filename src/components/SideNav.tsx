@@ -6,10 +6,11 @@ const NAV_ITEMS = [
   { path: '/products', icon: '☰', label: '商品一覧' },
   { path: '/low-stock', icon: '⚠', label: '在庫不足' },
   { path: '/orders', icon: '↧', label: '仕入れ' },
+  { path: '/monthly-purchases', icon: '¥', label: '今月仕入高' },
   { path: '/stocktake', icon: '⊟', label: '棚卸' },
   { path: '/transfer', icon: '⇄', label: '店舗間移動' },
   { path: '/sales', icon: '▲', label: '販売実績' },
-  { path: '/staff', icon: '◉', label: 'スタッフ' },
+  { path: '/staff', icon: '◉', label: '購入履歴' },
   { path: '/settings', icon: '⚙', label: '設定' },
 ]
 

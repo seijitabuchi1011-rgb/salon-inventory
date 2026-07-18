@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { StoreFilter, Product, StoreStock, Transaction, Transfer, TransferStatus } from '../types'
+import type { StoreFilter, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase } from '../types'
 
 interface AppState {
   currentStore: StoreFilter
@@ -23,6 +23,10 @@ interface AppState {
   addTransfer: (t: Omit<Transfer, 'id' | 'createdAt' | 'status'>) => void
   approveTransfer: (id: string) => void
   rejectTransfer: (id: string) => void
+  staffPurchases: StaffPurchase[]
+  addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
+  staffMembers: string[]
+  addStaffMember: (name: string) => void
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -928,15 +932,32 @@ export const useAppStore = create<AppState>()(
             t.id === id ? { ...t, status: '却下' as TransferStatus } : t
           ),
         })),
+      staffPurchases: [],
+      addStaffPurchase: (p) =>
+        set((state) => ({
+          staffPurchases: [
+            { ...p, id: `SP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() },
+            ...state.staffPurchases,
+          ],
+        })),
+      staffMembers: [],
+      addStaffMember: (name) =>
+        set((state) => ({
+          staffMembers: state.staffMembers.includes(name)
+            ? state.staffMembers
+            : [...state.staffMembers, name],
+        })),
     }),
     {
       name: 'salon-inventory-store',
-      version: 4,
+      version: 5,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
         transactions: state.transactions,
         transfers: state.transfers,
+        staffPurchases: state.staffPurchases,
+        staffMembers: state.staffMembers,
       }),
       migrate: (persistedState, fromVersion) => {
         const saved = persistedState as {
@@ -944,21 +965,25 @@ export const useAppStore = create<AppState>()(
           stocks?: StoreStock[]
           transactions?: Transaction[]
           transfers?: Transfer[]
+          staffPurchases?: StaffPurchase[]
+          staffMembers?: string[]
         }
         const products = saved.products ?? []
         const stocks = saved.stocks ?? []
         const transactions = saved.transactions ?? []
         const transfers = saved.transfers ?? []
+        const staffPurchases = saved.staffPurchases ?? []
+        const staffMembers = saved.staffMembers ?? []
 
         if (fromVersion < 3) {
           const newProducts = initialProducts.filter((ip) => !products.some((p) => p.id === ip.id))
           const newStocks = initialStocks.filter(
             (is) => !stocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
           )
-          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks], transactions: [], transfers: [] }
+          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks], transactions: [], transfers: [], staffPurchases: [], staffMembers: [] }
         }
 
-        return { products, stocks, transactions, transfers }
+        return { products, stocks, transactions, transfers, staffPurchases, staffMembers }
       },
     }
   )

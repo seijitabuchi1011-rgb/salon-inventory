@@ -66,6 +66,7 @@ export function ProductEdit() {
   const [lienMin, setLienMin] = useState(existingLienStock?.minStock ?? 3)
   const [lienActive, setLienActive] = useState(existingLienStock?.active ?? true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
+  const [taxRate, setTaxRate] = useState<8 | 10>(existing?.taxRate ?? 10)
 
   // useState の初期値は初回レンダリング時のみ評価されるため、
   // zustand の localStorage 復元後に確実に同期する
@@ -78,6 +79,7 @@ export function ProductEdit() {
     setPurchasePrice(existing.purchasePrice?.toString() ?? '')
     setSellPrice(existing.sellPrice?.toString() ?? '')
     setMemo(existing.memo ?? '')
+    setTaxRate(existing.taxRate ?? 10)
 
     const fStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'flag')
     const lStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'lien')
@@ -97,6 +99,7 @@ export function ProductEdit() {
       barcode,
       purchasePrice: Number(purchasePrice) || 0,
       sellPrice: Number(sellPrice) || 0,
+      taxRate,
       memo,
     })
     upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
@@ -219,6 +222,54 @@ export function ProductEdit() {
                 <Field label="販売価格 (税抜)">
                   <TextInput value={sellPrice} onChange={setSellPrice} prefix="¥" placeholder="0" />
                 </Field>
+
+                {/* 税率設定 */}
+                <div className="col-span-2">
+                  <Field label="税率">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTaxRate(10)}
+                        className={`flex-1 h-10 rounded-md text-sm font-bold border-2 transition-colors ${
+                          taxRate === 10
+                            ? 'bg-accent text-white border-accent'
+                            : 'bg-surface text-muted border-border'
+                        }`}
+                      >
+                        10% 標準税率
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaxRate(8)}
+                        className={`flex-1 h-10 rounded-md text-sm font-bold border-2 transition-colors ${
+                          taxRate === 8
+                            ? 'bg-ok text-white border-ok'
+                            : 'bg-surface text-muted border-border'
+                        }`}
+                      >
+                        8% 軽減税率
+                      </button>
+                    </div>
+                  </Field>
+                </div>
+
+                {/* 税込プレビュー */}
+                {(Number(purchasePrice) > 0 || Number(sellPrice) > 0) && (
+                  <div className="col-span-2 rounded-lg bg-bg border border-border p-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-2xs text-faint mb-0.5">仕入 税込 ({taxRate}%)</p>
+                      <p className="text-base font-bold tabular-nums">
+                        ¥{Math.round(Number(purchasePrice) * (taxRate === 10 ? 1.1 : 1.08)).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-2xs text-faint mb-0.5">販売 税込 ({taxRate}%)</p>
+                      <p className="text-base font-bold tabular-nums text-accent">
+                        ¥{Math.round(Number(sellPrice) * (taxRate === 10 ? 1.1 : 1.08)).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* 店舗別在庫設定 */}
                 <div className="col-span-2 pt-3 border-t border-border">

@@ -8,6 +8,7 @@ import { Orders } from './screens/Orders'
 import { Stocktake } from './screens/Stocktake'
 import { Transfer } from './screens/Transfer'
 import { Sales } from './screens/Sales'
+import { MonthlyPurchases } from './screens/MonthlyPurchases'
 import { StaffScreen } from './screens/Staff'
 import { Settings } from './screens/Settings'
 
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/stocktake" element={<Stocktake />} />
         <Route path="/transfer" element={<Transfer />} />
         <Route path="/sales" element={<Sales />} />
+        <Route path="/monthly-purchases" element={<MonthlyPurchases />} />
         <Route path="/staff" element={<StaffScreen />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
