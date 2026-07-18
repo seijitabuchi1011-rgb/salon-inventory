@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   DndContext,
   closestCenter,
@@ -115,9 +115,12 @@ function SortableRow({
 
 export function Products() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { products, stocks, deleteProduct, reorderProducts } = useAppStore()
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('すべて')
+  const [category, setCategory] = useState<string>(
+    (location.state as { category?: string } | null)?.category ?? 'すべて'
+  )
   const [confirmId, setConfirmId] = useState<string | null>(null)
 
   const sensors = useSensors(
@@ -206,7 +209,7 @@ export function Products() {
                         p={p}
                         flagStock={getStock(p.id, 'flag')}
                         lienStock={getStock(p.id, 'lien')}
-                        onNavigate={() => navigate(`/products/${p.id}`)}
+                        onNavigate={() => navigate(`/products/${p.id}`, { state: { category } })}
                         onDelete={() => setConfirmId(p.id)}
                       />
                     ))}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Btn } from '../components/Btn'
@@ -44,7 +44,11 @@ function NumberInput({ value, onChange }: { value: number; onChange: (v: number)
 export function ProductEdit() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const location = useLocation()
+  const backCategory = (location.state as { category?: string } | null)?.category
   const { products, stocks, upsertProduct, upsertStock } = useAppStore()
+
+  const goBack = () => navigate('/products', { state: { category: backCategory } })
   const existing = id && id !== 'new' ? products.find((p) => p.id === id) : undefined
   const existingFlagStock = existing ? stocks.find((s) => s.productId === existing.id && s.storeId === 'flag') : undefined
   const existingLienStock = existing ? stocks.find((s) => s.productId === existing.id && s.storeId === 'lien') : undefined
@@ -97,7 +101,7 @@ export function ProductEdit() {
     })
     upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
     upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
-    navigate(-1)
+    goBack()
   }
 
   return (
@@ -106,10 +110,11 @@ export function ProductEdit() {
       <AppBar
         title={title}
         back
+        onBack={goBack}
         showStoreSwitch={false}
         right={
           <div className="flex gap-2">
-            <Btn variant="ghost" size="sm" onClick={() => navigate(-1)}>キャンセル</Btn>
+            <Btn variant="ghost" size="sm" onClick={goBack}>キャンセル</Btn>
             <Btn variant="primary" size="sm" onClick={handleSave}>✓ 保存</Btn>
           </div>
         }
