@@ -38,6 +38,32 @@ function stockStatus(current: number, min: number): { label: string; variant: 'd
   return { label: '十分', variant: 'ok' }
 }
 
+function ActiveToggle({
+  active,
+  color,
+  onToggle,
+}: {
+  active: boolean
+  color: 'flag' | 'lien'
+  onToggle: () => void
+}) {
+  const activeStyle =
+    color === 'flag'
+      ? 'bg-[#1B5EB8] text-white'
+      : 'bg-[#7B2FA8] text-white'
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all mx-auto ${
+        active ? activeStyle : 'bg-bg border-2 border-border text-faint'
+      }`}
+    >
+      {active ? '✓' : '✗'}
+    </button>
+  )
+}
+
 function SortableRow({
   p,
   flagStock,
@@ -46,6 +72,8 @@ function SortableRow({
   onCheck,
   onNavigate,
   onDelete,
+  onToggleFlagActive,
+  onToggleLienActive,
 }: {
   p: Product
   flagStock: StoreStock | undefined
@@ -54,9 +82,13 @@ function SortableRow({
   onCheck: (checked: boolean) => void
   onNavigate: () => void
   onDelete: () => void
+  onToggleFlagActive: () => void
+  onToggleLienActive: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id })
 
+  const flagActive = flagStock?.active ?? true
+  const lienActive = lienStock?.active ?? true
   const total = (flagStock?.currentStock ?? 0) + (lienStock?.currentStock ?? 0)
   const totalMin = (flagStock?.minStock ?? 0) + (lienStock?.minStock ?? 0)
   const status = stockStatus(total, totalMin)
@@ -108,11 +140,19 @@ function SortableRow({
         <div className="text-2xs text-faint font-mono mt-0.5">{p.barcode}</div>
       </td>
       <td className="px-4 py-3 text-xs text-muted cursor-pointer" onClick={onNavigate}>{p.category}</td>
+      {/* flag 取扱トグル */}
+      <td className="px-2 py-3 w-16 text-center" onClick={(e) => e.stopPropagation()}>
+        <ActiveToggle active={flagActive} color="flag" onToggle={onToggleFlagActive} />
+      </td>
+      {/* Lien 取扱トグル */}
+      <td className="px-2 py-3 w-16 text-center" onClick={(e) => e.stopPropagation()}>
+        <ActiveToggle active={lienActive} color="lien" onToggle={onToggleLienActive} />
+      </td>
       <td className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer ${flagLow ? 'text-danger' : 'text-text'}`} onClick={onNavigate}>
-        {flagStock?.currentStock ?? '—'}
+        {flagActive ? (flagStock?.currentStock ?? '—') : <span className="text-faint text-xs">取扱なし</span>}
       </td>
       <td className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer ${lienLow ? 'text-danger' : 'text-text'}`} onClick={onNavigate}>
-        {lienStock?.currentStock ?? '—'}
+        {lienActive ? (lienStock?.currentStock ?? '—') : <span className="text-faint text-xs">取扱なし</span>}
       </td>
       <td className="px-4 py-3 text-right font-bold tabular-nums cursor-pointer" onClick={onNavigate}>{total}</td>
       <td className="px-4 py-3 text-center cursor-pointer" onClick={onNavigate}>
@@ -133,19 +173,14 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { products, stocks, deleteProduct, reorderProducts, bulkUpdateCategory, bulkUpdateStocks } = useAppStore()
+  const { products, stocks, upsertStock, deleteProduct, reorderProducts, bulkUpdateCategory } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
   )
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkTab, setBulkTab] = useState<'category' | 'store'>('category')
   const [bulkCategory, setBulkCategory] = useState('')
-  const [bulkFlagActive, setBulkFlagActive] = useState<'' | 'true' | 'false'>('')
-  const [bulkLienActive, setBulkLienActive] = useState<'' | 'true' | 'false'>('')
-  const [bulkFlagMin, setBulkFlagMin] = useState('')
-  const [bulkLienMin, setBulkLienMin] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -185,37 +220,26 @@ export function Products() {
     })
   }
 
-  function clearSelection() {
-    setSelectedIds(new Set())
-    setBulkCategory('')
-    setBulkFlagActive('')
-    setBulkLienActive('')
-    setBulkFlagMin('')
-    setBulkLienMin('')
-  }
-
   function applyBulkCategory() {
     if (!bulkCategory || selectedIds.size === 0) return
     bulkUpdateCategory([...selectedIds], bulkCategory)
-    clearSelection()
-  }
-
-  function applyBulkStore() {
-    const flagPatch: Partial<Pick<{ active: boolean; minStock: number }, 'active' | 'minStock'>> = {}
-    if (bulkFlagActive !== '') flagPatch.active = bulkFlagActive === 'true'
-    if (bulkFlagMin !== '') flagPatch.minStock = Number(bulkFlagMin)
-    const lienPatch: Partial<Pick<{ active: boolean; minStock: number }, 'active' | 'minStock'>> = {}
-    if (bulkLienActive !== '') lienPatch.active = bulkLienActive === 'true'
-    if (bulkLienMin !== '') lienPatch.minStock = Number(bulkLienMin)
-    const hasFlagChange = Object.keys(flagPatch).length > 0
-    const hasLienChange = Object.keys(lienPatch).length > 0
-    if (!hasFlagChange && !hasLienChange) return
-    bulkUpdateStocks([...selectedIds], hasFlagChange ? flagPatch : null, hasLienChange ? lienPatch : null)
-    clearSelection()
+    setSelectedIds(new Set())
+    setBulkCategory('')
   }
 
   function getStock(productId: string, storeId: 'flag' | 'lien') {
     return stocks.find((s) => s.productId === productId && s.storeId === storeId)
+  }
+
+  function toggleActive(productId: string, storeId: 'flag' | 'lien') {
+    const s = getStock(productId, storeId)
+    upsertStock({
+      productId,
+      storeId,
+      currentStock: s?.currentStock ?? 0,
+      minStock: s?.minStock ?? 3,
+      active: !(s?.active ?? true),
+    })
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -287,8 +311,10 @@ export function Products() {
                   <th className="text-left px-3 py-3 text-xs font-semibold text-muted w-12"></th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">カテゴリ</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">flag</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">Lien</th>
+                  <th className="text-center px-2 py-3 text-xs font-semibold w-16" style={{ color: '#1B5EB8' }}>flag<br/>取扱</th>
+                  <th className="text-center px-2 py-3 text-xs font-semibold w-16" style={{ color: '#7B2FA8' }}>Lien<br/>取扱</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">flag在庫</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">Lien在庫</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">合計</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-muted w-24">状態</th>
                   <th className="w-16"></th>
@@ -307,6 +333,8 @@ export function Products() {
                         onCheck={(v) => toggleOne(p.id, v)}
                         onNavigate={() => navigate(`/products/${p.id}`, { state: { category } })}
                         onDelete={() => setConfirmId(p.id)}
+                        onToggleFlagActive={() => toggleActive(p.id, 'flag')}
+                        onToggleLienActive={() => toggleActive(p.id, 'lien')}
                       />
                     ))}
                   </tbody>
@@ -317,113 +345,34 @@ export function Products() {
         </main>
       </div>
 
-      {/* 一括操作バー */}
+      {/* 一括カテゴリ変更バー */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-lg px-4 py-3 flex flex-col gap-2">
-          {/* タブ行 */}
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-accent flex-shrink-0">{selectedIds.size}件 選択中</span>
-            <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
-              <button
-                onClick={() => setBulkTab('category')}
-                className={`px-3 py-1.5 transition-colors ${bulkTab === 'category' ? 'bg-accent text-white' : 'text-muted hover:bg-bg'}`}
-              >
-                カテゴリ変更
-              </button>
-              <button
-                onClick={() => setBulkTab('store')}
-                className={`px-3 py-1.5 border-l border-border transition-colors ${bulkTab === 'store' ? 'bg-accent text-white' : 'text-muted hover:bg-bg'}`}
-              >
-                店舗設定
-              </button>
-            </div>
-            <button onClick={clearSelection} className="ml-auto px-3 h-8 rounded-md border border-border text-xs text-muted flex-shrink-0">
-              キャンセル
-            </button>
-          </div>
-
-          {/* カテゴリ変更パネル */}
-          {bulkTab === 'category' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted flex-shrink-0">移動先カテゴリ:</span>
-              <select
-                value={bulkCategory}
-                onChange={(e) => setBulkCategory(e.target.value)}
-                className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
-              >
-                <option value="">カテゴリを選択</option>
-                {MOVE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <button
-                onClick={applyBulkCategory}
-                disabled={!bulkCategory}
-                className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
-              >
-                移動
-              </button>
-            </div>
-          )}
-
-          {/* 店舗設定パネル */}
-          {bulkTab === 'store' && (
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* flag */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-[#E6EEF9]">
-                <span className="text-xs font-bold text-[#1B5EB8] flex-shrink-0">flag</span>
-                <span className="text-xs text-muted flex-shrink-0">取扱:</span>
-                <select
-                  value={bulkFlagActive}
-                  onChange={(e) => setBulkFlagActive(e.target.value as '' | 'true' | 'false')}
-                  className="h-8 border border-[#BFD3EC] rounded px-2 text-xs bg-white text-text outline-none"
-                >
-                  <option value="">変更しない</option>
-                  <option value="true">取扱あり ✓</option>
-                  <option value="false">取扱なし ✗</option>
-                </select>
-                <span className="text-xs text-muted flex-shrink-0">下限:</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={bulkFlagMin}
-                  onChange={(e) => setBulkFlagMin(e.target.value)}
-                  placeholder="—"
-                  className="w-14 h-8 border border-[#BFD3EC] rounded px-2 text-xs bg-white text-text outline-none text-center"
-                />
-              </div>
-              {/* Lien */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-[#F1E8F5]">
-                <span className="text-xs font-bold text-[#7B2FA8] flex-shrink-0">Lien</span>
-                <span className="text-xs text-muted flex-shrink-0">取扱:</span>
-                <select
-                  value={bulkLienActive}
-                  onChange={(e) => setBulkLienActive(e.target.value as '' | 'true' | 'false')}
-                  className="h-8 border border-[#DDC3E6] rounded px-2 text-xs bg-white text-text outline-none"
-                >
-                  <option value="">変更しない</option>
-                  <option value="true">取扱あり ✓</option>
-                  <option value="false">取扱なし ✗</option>
-                </select>
-                <span className="text-xs text-muted flex-shrink-0">下限:</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={bulkLienMin}
-                  onChange={(e) => setBulkLienMin(e.target.value)}
-                  placeholder="—"
-                  className="w-14 h-8 border border-[#DDC3E6] rounded px-2 text-xs bg-white text-text outline-none text-center"
-                />
-              </div>
-              <button
-                onClick={applyBulkStore}
-                disabled={!bulkFlagActive && !bulkLienActive && !bulkFlagMin && !bulkLienMin}
-                className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
-              >
-                適用
-              </button>
-            </div>
-          )}
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-lg px-6 py-3 flex items-center gap-3">
+          <span className="text-sm font-bold text-accent flex-shrink-0">{selectedIds.size}件 選択中</span>
+          <span className="text-xs text-muted flex-shrink-0">カテゴリを一括変更:</span>
+          <select
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
+          >
+            <option value="">カテゴリを選択</option>
+            {MOVE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <button
+            onClick={applyBulkCategory}
+            disabled={!bulkCategory}
+            className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
+          >
+            移動
+          </button>
+          <button
+            onClick={() => { setSelectedIds(new Set()); setBulkCategory('') }}
+            className="px-4 h-9 rounded-md border border-border text-sm text-muted flex-shrink-0"
+          >
+            キャンセル
+          </button>
         </div>
       )}
 
