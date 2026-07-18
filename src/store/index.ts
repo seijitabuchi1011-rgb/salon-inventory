@@ -11,6 +11,7 @@ interface AppState {
   upsertStock: (stock: StoreStock) => void
   deleteProduct: (id: string) => void
   reorderProducts: (activeId: string, overId: string) => void
+  bulkUpdateCategory: (ids: string[], category: string) => void
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -838,6 +839,12 @@ export const useAppStore = create<AppState>()(
           if (from === -1 || to === -1 || from === to) return state
           return { products: moveItem(state.products, from, to) }
         }),
+      bulkUpdateCategory: (ids, category) =>
+        set((state) => ({
+          products: state.products.map((p) =>
+            ids.includes(p.id) ? { ...p, category } : p
+          ),
+        })),
     }),
     {
       name: 'salon-inventory-store',

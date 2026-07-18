@@ -30,6 +30,8 @@ const CATEGORIES = [
   'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
 ]
 
+const MOVE_CATEGORIES = CATEGORIES.filter((c) => c !== 'すべて')
+
 function stockStatus(current: number, min: number): { label: string; variant: 'danger' | 'warn' | 'ok' } {
   if (current <= min) return { label: '不足', variant: 'danger' }
   if (current <= min * 1.5) return { label: '少', variant: 'warn' }
@@ -40,12 +42,16 @@ function SortableRow({
   p,
   flagStock,
   lienStock,
+  checked,
+  onCheck,
   onNavigate,
   onDelete,
 }: {
   p: Product
   flagStock: StoreStock | undefined
   lienStock: StoreStock | undefined
+  checked: boolean
+  onCheck: (checked: boolean) => void
   onNavigate: () => void
   onDelete: () => void
 }) {
@@ -64,10 +70,21 @@ function SortableRow({
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
-        background: isDragging ? '#F0F0EE' : undefined,
+        background: checked ? '#EEEEFB' : isDragging ? '#F0F0EE' : undefined,
       }}
-      className="border-b border-border hover:bg-bg transition-colors"
+      className="border-b border-border transition-colors"
     >
+      {/* チェックボックス */}
+      <td className="px-3 py-3 w-10 text-center" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => onCheck(!checked)}
+          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+            checked ? 'bg-accent border-accent text-white' : 'border-border-strong'
+          }`}
+        >
+          {checked && <span className="text-xs leading-none">✓</span>}
+        </button>
+      </td>
       {/* ドラッグハンドル */}
       <td className="px-2 py-3 w-8 text-center">
         <button
@@ -101,7 +118,7 @@ function SortableRow({
       <td className="px-4 py-3 text-center cursor-pointer" onClick={onNavigate}>
         <Badge variant={status.variant}>{status.label}</Badge>
       </td>
-      <td className="px-4 py-3 text-center">
+      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onDelete}
           className="px-2 py-1 text-xs text-danger border border-danger rounded hover:bg-danger-soft transition-colors"
@@ -116,12 +133,14 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { products, stocks, deleteProduct, reorderProducts } = useAppStore()
+  const { products, stocks, deleteProduct, reorderProducts, bulkUpdateCategory } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
   )
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkCategory, setBulkCategory] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -133,6 +152,40 @@ export function Products() {
     const matchCat = category === 'すべて' || p.category === category
     return matchSearch && matchCat
   })
+
+  const allChecked = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id))
+  const someChecked = filtered.some((p) => selectedIds.has(p.id))
+
+  function toggleAll() {
+    if (allChecked) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filtered.forEach((p) => next.delete(p.id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filtered.forEach((p) => next.add(p.id))
+        return next
+      })
+    }
+  }
+
+  function toggleOne(id: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      checked ? next.add(id) : next.delete(id)
+      return next
+    })
+  }
+
+  function applyBulkCategory() {
+    if (!bulkCategory || selectedIds.size === 0) return
+    bulkUpdateCategory([...selectedIds], bulkCategory)
+    setSelectedIds(new Set())
+    setBulkCategory('')
+  }
 
   function getStock(productId: string, storeId: 'flag' | 'lien') {
     return stocks.find((s) => s.productId === productId && s.storeId === storeId)
@@ -189,6 +242,20 @@ export function Products() {
             <table className="w-full text-sm border-collapse">
               <thead className="bg-bg border-b border-border sticky top-0 z-10">
                 <tr>
+                  <th className="px-3 py-3 w-10 text-center">
+                    <button
+                      onClick={toggleAll}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
+                        allChecked
+                          ? 'bg-accent border-accent text-white'
+                          : someChecked
+                          ? 'bg-accent/30 border-accent'
+                          : 'border-border-strong'
+                      }`}
+                    >
+                      {(allChecked || someChecked) && <span className="text-xs leading-none text-white">✓</span>}
+                    </button>
+                  </th>
                   <th className="w-8"></th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-muted w-12"></th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
@@ -209,6 +276,8 @@ export function Products() {
                         p={p}
                         flagStock={getStock(p.id, 'flag')}
                         lienStock={getStock(p.id, 'lien')}
+                        checked={selectedIds.has(p.id)}
+                        onCheck={(v) => toggleOne(p.id, v)}
                         onNavigate={() => navigate(`/products/${p.id}`, { state: { category } })}
                         onDelete={() => setConfirmId(p.id)}
                       />
@@ -220,6 +289,37 @@ export function Products() {
           </div>
         </main>
       </div>
+
+      {/* 一括カテゴリ変更バー */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-lg px-6 py-3 flex items-center gap-3">
+          <span className="text-sm font-bold text-accent flex-shrink-0">{selectedIds.size}件 選択中</span>
+          <span className="text-xs text-muted flex-shrink-0">カテゴリを変更:</span>
+          <select
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
+          >
+            <option value="">カテゴリを選択</option>
+            {MOVE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <button
+            onClick={applyBulkCategory}
+            disabled={!bulkCategory}
+            className="px-4 h-9 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-40 flex-shrink-0"
+          >
+            移動
+          </button>
+          <button
+            onClick={() => { setSelectedIds(new Set()); setBulkCategory('') }}
+            className="px-4 h-9 rounded-md border border-border text-sm text-muted flex-shrink-0"
+          >
+            キャンセル
+          </button>
+        </div>
+      )}
 
       {/* 削除確認ダイアログ */}
       {confirmId && (() => {
