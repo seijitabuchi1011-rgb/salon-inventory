@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
@@ -62,6 +62,24 @@ export function ProductEdit() {
   const [lienMin, setLienMin] = useState(existingLienStock?.minStock ?? 3)
   const [lienActive, setLienActive] = useState(existingLienStock?.active ?? true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
+
+  // useState の初期値は初回レンダリング時のみ評価されるため、
+  // zustand の localStorage 復元後に確実に同期する
+  useEffect(() => {
+    if (!existing) return
+    setName(existing.name)
+    setCategory(existing.category)
+    setMaker(existing.maker)
+    setBarcode(existing.barcode)
+    setPurchasePrice(existing.purchasePrice?.toString() ?? '')
+    setSellPrice(existing.sellPrice?.toString() ?? '')
+    setMemo(existing.memo ?? '')
+
+    const fStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'flag')
+    const lStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'lien')
+    if (fStock) { setFlagStock(fStock.currentStock); setFlagMin(fStock.minStock); setFlagActive(fStock.active) }
+    if (lStock) { setLienStock(lStock.currentStock); setLienMin(lStock.minStock); setLienActive(lStock.active) }
+  }, [existing?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = existing ? '商品登録・編集' : '商品登録・編集'
 
