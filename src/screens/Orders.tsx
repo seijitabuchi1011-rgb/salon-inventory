@@ -26,7 +26,7 @@ type ModalState = {
 }
 
 export function Orders() {
-  const { products, stocks, upsertStock } = useAppStore()
+  const { products, stocks, upsertStock, addTransaction } = useAppStore()
   const [tab, setTab] = useState<Tab>('receive')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('すべて')
@@ -42,13 +42,10 @@ export function Orders() {
   function quickUpdate(productId: string, storeId: 'flag' | 'lien', delta: number) {
     const s = getStock(productId, storeId)
     const next = Math.max(0, (s?.currentStock ?? 0) + delta)
-    upsertStock({
-      productId,
-      storeId,
-      currentStock: next,
-      minStock: s?.minStock ?? 3,
-      active: s?.active ?? true,
-    })
+    upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
+    if (delta !== 0) {
+      addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
+    }
   }
 
   // モーダルで任意数を入力
@@ -70,13 +67,8 @@ export function Orders() {
     const newStock = isReceive
       ? modal.currentStock + modal.quantity
       : Math.max(0, modal.currentStock - modal.quantity)
-    upsertStock({
-      productId: modal.productId,
-      storeId: modal.storeId,
-      currentStock: newStock,
-      minStock: modal.minStock,
-      active: modal.active,
-    })
+    upsertStock({ productId: modal.productId, storeId: modal.storeId, currentStock: newStock, minStock: modal.minStock, active: modal.active })
+    addTransaction({ type: isReceive ? 'receive' : 'dispense', productId: modal.productId, storeId: modal.storeId, quantity: modal.quantity })
     setModal(null)
   }
 

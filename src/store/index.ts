@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { StoreFilter, Product, StoreStock } from '../types'
+import type { StoreFilter, Product, StoreStock, Transaction, Transfer, TransferStatus } from '../types'
 
 interface AppState {
   currentStore: StoreFilter
@@ -17,6 +17,12 @@ interface AppState {
     flagPatch: Partial<Pick<StoreStock, 'active' | 'minStock'>> | null,
     lienPatch: Partial<Pick<StoreStock, 'active' | 'minStock'>> | null,
   ) => void
+  transactions: Transaction[]
+  addTransaction: (t: Omit<Transaction, 'id' | 'timestamp'>) => void
+  transfers: Transfer[]
+  addTransfer: (t: Omit<Transfer, 'id' | 'createdAt' | 'status'>) => void
+  approveTransfer: (id: string) => void
+  rejectTransfer: (id: string) => void
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -869,28 +875,90 @@ export const useAppStore = create<AppState>()(
           })
           return { stocks: [...updated, ...extra] }
         }),
+      transactions: [],
+      addTransaction: (t) =>
+        set((state) => ({
+          transactions: [
+            { ...t, id: `TX-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() },
+            ...state.transactions,
+          ],
+        })),
+      transfers: [],
+      addTransfer: (t) =>
+        set((state) => ({
+          transfers: [
+            {
+              ...t,
+              id: `TR-${Date.now()}`,
+              createdAt: new Date().toISOString().slice(0, 10),
+              status: '承認待ち' as TransferStatus,
+            },
+            ...state.transfers,
+          ],
+        })),
+      approveTransfer: (id) =>
+        set((state) => {
+          const tr = state.transfers.find((t) => t.id === id)
+          if (!tr || tr.status !== '承認待ち') return state
+
+          let stocks = state.stocks.map((s) => {
+            const item = tr.items.find((i) => i.productId === s.productId)
+            if (!item) return s
+            if (s.storeId === tr.fromStore) return { ...s, currentStock: Math.max(0, s.currentStock - item.quantity) }
+            if (s.storeId === tr.toStore) return { ...s, currentStock: s.currentStock + item.quantity }
+            return s
+          })
+
+          tr.items.forEach(({ productId, quantity }) => {
+            if (!stocks.some((s) => s.productId === productId && s.storeId === tr.toStore)) {
+              stocks = [...stocks, { productId, storeId: tr.toStore, currentStock: quantity, minStock: 3, active: true }]
+            }
+          })
+
+          return {
+            stocks,
+            transfers: state.transfers.map((t) =>
+              t.id === id ? { ...t, status: '承認済' as TransferStatus } : t
+            ),
+          }
+        }),
+      rejectTransfer: (id) =>
+        set((state) => ({
+          transfers: state.transfers.map((t) =>
+            t.id === id ? { ...t, status: '却下' as TransferStatus } : t
+          ),
+        })),
     }),
     {
       name: 'salon-inventory-store',
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
+        transactions: state.transactions,
+        transfers: state.transfers,
       }),
       migrate: (persistedState, fromVersion) => {
-        const saved = persistedState as { products?: Product[]; stocks?: StoreStock[] }
+        const saved = persistedState as {
+          products?: Product[]
+          stocks?: StoreStock[]
+          transactions?: Transaction[]
+          transfers?: Transfer[]
+        }
         const products = saved.products ?? []
         const stocks = saved.stocks ?? []
+        const transactions = saved.transactions ?? []
+        const transfers = saved.transfers ?? []
 
         if (fromVersion < 3) {
           const newProducts = initialProducts.filter((ip) => !products.some((p) => p.id === ip.id))
           const newStocks = initialStocks.filter(
             (is) => !stocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
           )
-          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks] }
+          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks], transactions: [], transfers: [] }
         }
 
-        return { products, stocks }
+        return { products, stocks, transactions, transfers }
       },
     }
   )

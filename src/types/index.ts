@@ -38,7 +38,17 @@ export interface Order {
   items: OrderItem[]
 }
 
-export type TransferStatus = '承認待ち' | '承認済'
+export type TransferStatus = '承認待ち' | '承認済' | '却下'
+
+export interface Transaction {
+  id: string
+  type: 'receive' | 'dispense' | 'transfer'
+  productId: string
+  storeId: StoreId
+  quantity: number
+  relatedStoreId?: StoreId
+  timestamp: number
+}
 
 export interface TransferItem {
   productId: string

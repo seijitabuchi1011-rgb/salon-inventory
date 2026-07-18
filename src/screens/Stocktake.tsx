@@ -93,24 +93,25 @@ export function Stocktake() {
 
   function confirmInput() {
     if (!modal || !modalItem) return
-    const qty = modal.inputQty
     setActualCounts((prev) => ({
       ...prev,
-      [store]: { ...prev[store], [modal.productId]: qty },
+      [store]: { ...prev[store], [modal.productId]: modal.inputQty },
     }))
-    const s = stocks.find((s) => s.productId === modal.productId && s.storeId === store)
-    upsertStock({
-      productId: modal.productId,
-      storeId: store,
-      currentStock: qty,
-      minStock: s?.minStock ?? 3,
-      active: s?.active ?? true,
-    })
     setModal(null)
   }
 
   function completeStocktake() {
-    // このセッションのカウントをリセットして次回棚卸を新しく始められるようにする
+    // 確認済みの実棚数を一括で在庫に反映
+    Object.entries(actualCounts[store]).forEach(([productId, qty]) => {
+      const s = stocks.find((st) => st.productId === productId && st.storeId === store)
+      upsertStock({
+        productId,
+        storeId: store,
+        currentStock: qty,
+        minStock: s?.minStock ?? 3,
+        active: s?.active ?? true,
+      })
+    })
     setActualCounts((prev) => ({ ...prev, [store]: {} }))
     setShowCompleteModal(false)
     setStatusFilter('すべて')
