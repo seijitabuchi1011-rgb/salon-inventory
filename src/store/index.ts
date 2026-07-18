@@ -131,28 +131,26 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'salon-inventory-store',
+      version: 1,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
       }),
-      // localStorageの既存データにない初期商品・在庫を差分追加する
-      merge: (persisted, current) => {
-        const p = persisted as Partial<AppState>
-        const savedProducts = p.products ?? []
-        const savedStocks = p.stocks ?? []
+      // version 0 → 1: ブリーチ剤5種など initialProducts にある未保存商品を追加
+      migrate: (persistedState, fromVersion) => {
+        const saved = persistedState as { products?: Product[]; stocks?: StoreStock[] }
+        const products = saved.products ?? []
+        const stocks = saved.stocks ?? []
 
-        const addedProducts = initialProducts.filter(
-          (ip) => !savedProducts.some((sp) => sp.id === ip.id)
-        )
-        const addedStocks = initialStocks.filter(
-          (is) => !savedStocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
-        )
-
-        return {
-          ...current,
-          products: [...savedProducts, ...addedProducts],
-          stocks: [...savedStocks, ...addedStocks],
+        if (fromVersion < 1) {
+          const newProducts = initialProducts.filter((ip) => !products.some((p) => p.id === ip.id))
+          const newStocks = initialStocks.filter(
+            (is) => !stocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
+          )
+          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks] }
         }
+
+        return { products, stocks }
       },
     }
   )
