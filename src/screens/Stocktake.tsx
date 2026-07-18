@@ -5,8 +5,9 @@ import { Badge } from '../components/Badge'
 import { Btn } from '../components/Btn'
 import { Card } from '../components/Card'
 import { StoreDot } from '../components/StoreDot'
+import { useAppStore } from '../store'
 
-type StoreFilter = 'flag' | 'lien'
+type StoreTab = 'flag' | 'lien'
 type ItemStatus = '未確認' | '確認済' | '差異'
 type FilterType = 'すべて' | '未確認' | '確認済' | '差異'
 
@@ -14,107 +15,106 @@ const STATUS_VARIANT: Record<ItemStatus, 'muted' | 'ok' | 'danger'> = {
   未確認: 'muted', 確認済: 'ok', 差異: 'danger',
 }
 
-type Item = {
-  id: string
-  name: string
-  category: string
-  purchasePrice: number
-  theoretical: { flag: number; lien: number }
-  actual: { flag: number | null; lien: number | null }
-  status: { flag: ItemStatus; lien: ItemStatus }
-}
-
-const INITIAL_ITEMS: Item[] = [
-  { id: '1', name: 'ミルボン ジェミールフラン シャンプー 500ml', category: 'シャンプー', purchasePrice: 1800,
-    theoretical: { flag: 8, lien: 3 }, actual: { flag: 8, lien: null }, status: { flag: '確認済', lien: '未確認' } },
-  { id: '2', name: 'ケラスターゼ ソワン オレオ', category: 'トリートメント', purchasePrice: 3200,
-    theoretical: { flag: 12, lien: 6 }, actual: { flag: 10, lien: null }, status: { flag: '差異', lien: '未確認' } },
-  { id: '3', name: 'OWAY カラーマスク ヘナ', category: 'カラー剤', purchasePrice: 2600,
-    theoretical: { flag: 2, lien: 1 }, actual: { flag: 2, lien: 1 }, status: { flag: '確認済', lien: '確認済' } },
-  { id: '4', name: 'デミ アドミオオイル', category: 'スタイリング', purchasePrice: 1400,
-    theoretical: { flag: 15, lien: 9 }, actual: { flag: 15, lien: 9 }, status: { flag: '確認済', lien: '確認済' } },
-  { id: '5', name: 'ナプラ ケアテクトHB', category: 'シャンプー', purchasePrice: 1500,
-    theoretical: { flag: 4, lien: 7 }, actual: { flag: null, lien: null }, status: { flag: '未確認', lien: '未確認' } },
-  { id: '6', name: 'アジュバン コンポジオ EX', category: 'トリートメント', purchasePrice: 2800,
-    theoretical: { flag: 5, lien: 2 }, actual: { flag: 5, lien: null }, status: { flag: '確認済', lien: '未確認' } },
-  { id: '7', name: 'ロレアル ヴィタロル CC', category: 'カラー剤', purchasePrice: 980,
-    theoretical: { flag: 6, lien: 4 }, actual: { flag: 5, lien: null }, status: { flag: '差異', lien: '未確認' } },
-  { id: '8', name: 'ホーユー ビゲン クリーム', category: 'カラー剤', purchasePrice: 750,
-    theoretical: { flag: 10, lien: 8 }, actual: { flag: 10, lien: 8 }, status: { flag: '確認済', lien: '確認済' } },
-]
-
-function calcTotalValue(items: Item[], store: StoreFilter) {
-  return items.reduce((sum, item) => {
-    const qty = item.actual[store]
-    return qty !== null ? sum + qty * item.purchasePrice : sum
-  }, 0)
-}
-
-function exportCsv(items: Item[], store: StoreFilter, month: string) {
-  const storeName = store === 'flag' ? 'flag美容室' : 'Lien美容室'
-  const header = ['商品名', 'カテゴリ', '仕入単価', '理論在庫', '実棚数', '差異', '状態', '在庫金額']
-  const rows = items.map((item) => {
-    const theoretical = item.theoretical[store]
-    const actual = item.actual[store]
-    const diff = actual !== null ? actual - theoretical : ''
-    const value = actual !== null ? actual * item.purchasePrice : ''
-    return [
-      item.name, item.category, item.purchasePrice,
-      theoretical, actual ?? '', diff,
-      item.status[store], value,
-    ]
-  })
-  const totalValue = calcTotalValue(items, store)
-  rows.push(['', '', '', '', '', '', '合計金額', totalValue])
-
-  const csv = [header, ...rows]
-    .map((r) => r.map((v) => `"${v}"`).join(','))
-    .join('\n')
-  const bom = '﻿'
-  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `棚卸_${storeName}_${month}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 export function Stocktake() {
-  const [store, setStore] = useState<StoreFilter>('flag')
+  const { products, stocks, upsertStock } = useAppStore()
+  const [store, setStore] = useState<StoreTab>('flag')
   const [filter, setFilter] = useState<FilterType>('すべて')
-  const [items, setItems] = useState<Item[]>(INITIAL_ITEMS)
-  const [modal, setModal] = useState<{ item: Item; inputQty: number } | null>(null)
+  const [modal, setModal] = useState<{ productId: string; inputQty: number } | null>(null)
 
-  const month = '2026年7月'
-  const confirmed = items.filter((i) => i.status[store] !== '未確認').length
-  const diffCount = items.filter((i) => i.status[store] === '差異').length
-  const progress = Math.round((confirmed / items.length) * 100)
-  const totalValue = calcTotalValue(items, store)
+  // 棚卸開始時の在庫スナップショット（このセッション中は変わらない）
+  const [theoretical] = useState<Record<string, Record<string, number>>>(() => {
+    const snap: Record<string, Record<string, number>> = { flag: {}, lien: {} }
+    stocks.forEach((s) => {
+      if (s.storeId === 'flag' || s.storeId === 'lien') {
+        snap[s.storeId][s.productId] = s.currentStock
+      }
+    })
+    return snap
+  })
 
-  const filtered = items.filter((item) =>
-    filter === 'すべて' ? true : item.status[store] === filter
+  // 入力済み実棚数
+  const [actualCounts, setActualCounts] = useState<Record<string, Record<string, number>>>({
+    flag: {}, lien: {},
+  })
+
+  const month = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+
+  // 選択店舗でアクティブな商品一覧を組み立て
+  const items = products
+    .map((p) => {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === store)
+      if (!s || s.active === false) return null
+      const theo = theoretical[store]?.[p.id] ?? s.currentStock
+      const actual = actualCounts[store][p.id] ?? null
+      const status: ItemStatus =
+        actual === null ? '未確認' :
+        actual === theo ? '確認済' : '差異'
+      return {
+        productId: p.id,
+        name: p.name,
+        category: p.category,
+        purchasePrice: p.purchasePrice ?? 0,
+        theoretical: theo,
+        minStock: s.minStock,
+        actual,
+        status,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+
+  const confirmed = items.filter((i) => i.status !== '未確認').length
+  const diffCount = items.filter((i) => i.status === '差異').length
+  const progress = items.length > 0 ? Math.round((confirmed / items.length) * 100) : 0
+  const totalValue = items.reduce((sum, item) =>
+    item.actual !== null ? sum + item.actual * item.purchasePrice : sum, 0
   )
 
-  function openModal(item: Item) {
-    setModal({ item, inputQty: item.actual[store] ?? item.theoretical[store] })
+  const filtered = items.filter((item) =>
+    filter === 'すべて' ? true : item.status === filter
+  )
+
+  const modalItem = modal ? items.find((i) => i.productId === modal.productId) : null
+
+  function openModal(item: typeof items[0]) {
+    setModal({ productId: item.productId, inputQty: item.actual ?? item.theoretical })
   }
 
   function confirmInput() {
-    if (!modal) return
+    if (!modal || !modalItem) return
     const qty = modal.inputQty
-    const theoretical = modal.item.theoretical[store]
-    const newStatus: ItemStatus = qty === theoretical ? '確認済' : '差異'
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id !== modal.item.id ? i : {
-          ...i,
-          actual: { ...i.actual, [store]: qty },
-          status: { ...i.status, [store]: newStatus },
-        }
-      )
-    )
+    setActualCounts((prev) => ({
+      ...prev,
+      [store]: { ...prev[store], [modal.productId]: qty },
+    }))
+    // 実棚数を在庫に反映
+    const s = stocks.find((s) => s.productId === modal.productId && s.storeId === store)
+    upsertStock({
+      productId: modal.productId,
+      storeId: store,
+      currentStock: qty,
+      minStock: s?.minStock ?? 3,
+      active: s?.active ?? true,
+    })
     setModal(null)
+  }
+
+  function exportCsv() {
+    const storeName = store === 'flag' ? 'flag美容室' : 'Lien美容室'
+    const header = ['商品名', 'カテゴリ', '仕入単価', '理論在庫', '実棚数', '差異', '状態', '在庫金額']
+    const rows = items.map((item) => {
+      const diff = item.actual !== null ? item.actual - item.theoretical : ''
+      const value = item.actual !== null ? item.actual * item.purchasePrice : ''
+      return [item.name, item.category, item.purchasePrice, item.theoretical, item.actual ?? '', diff, item.status, value]
+    })
+    rows.push(['', '', '', '', '', '', '合計金額', totalValue])
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `棚卸_${storeName}_${month}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -128,10 +128,10 @@ export function Stocktake() {
           {/* ヘッダー */}
           <div className="px-6 pt-5 pb-4 bg-surface border-b border-border">
             <div className="flex gap-2 mb-4">
-              {(['flag', 'lien'] as StoreFilter[]).map((s) => (
+              {(['flag', 'lien'] as StoreTab[]).map((s) => (
                 <button
                   key={s}
-                  onClick={() => setStore(s)}
+                  onClick={() => { setStore(s); setFilter('すべて') }}
                   className={`flex items-center gap-2 px-4 h-9 rounded-lg text-sm font-bold border transition-colors ${
                     store === s
                       ? s === 'flag' ? 'bg-flag-soft text-flag border-flag' : 'bg-lien-soft text-lien border-lien'
@@ -143,10 +143,8 @@ export function Stocktake() {
                 </button>
               ))}
               <div className="flex-1" />
-              <Btn variant="ghost" size="sm" onClick={() => exportCsv(items, store, month)}>
-                CSVエクスポート
-              </Btn>
-              <Btn variant="primary" size="sm">棚卸を完了</Btn>
+              <Btn variant="ghost" size="sm" onClick={exportCsv}>CSVエクスポート</Btn>
+              <Btn variant="primary" size="sm" disabled={confirmed === 0}>棚卸を完了</Btn>
             </div>
 
             {/* サマリーカード */}
@@ -171,7 +169,6 @@ export function Stocktake() {
                 <span className="text-3xl font-bold text-danger">{diffCount}</span>
                 <span className="text-xs text-faint">要確認</span>
               </Card>
-              {/* 合計金額カード */}
               <Card className="flex flex-col gap-1 border-accent">
                 <span className="text-xs text-accent font-semibold">在庫合計金額</span>
                 <span className="text-2xl font-bold text-text leading-tight">
@@ -203,73 +200,78 @@ export function Stocktake() {
 
           {/* テーブル */}
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead className="bg-bg border-b border-border sticky top-0 z-10">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">仕入単価</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">理論在庫</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">実棚数</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-16">差異</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-24">在庫金額</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-muted w-24">状態</th>
-                  <th className="px-4 py-3 w-20"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => {
-                  const theoretical = item.theoretical[store]
-                  const actual = item.actual[store]
-                  const diff = actual !== null ? actual - theoretical : null
-                  const status = item.status[store]
-                  const value = actual !== null ? actual * item.purchasePrice : null
+            {items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted gap-3">
+                <span className="text-5xl">📦</span>
+                <p className="text-base font-semibold">取扱商品がありません</p>
+                <p className="text-xs text-faint">商品一覧で {store === 'flag' ? 'flag' : 'Lien'} の取扱をONにしてください</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm border-collapse">
+                <thead className="bg-bg border-b border-border sticky top-0 z-10">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">仕入単価</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">理論在庫</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">実棚数</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-16">差異</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-24">在庫金額</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-muted w-24">状態</th>
+                    <th className="px-4 py-3 w-20"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((item) => {
+                    const diff = item.actual !== null ? item.actual - item.theoretical : null
+                    const value = item.actual !== null ? item.actual * item.purchasePrice : null
 
-                  return (
-                    <tr key={item.id} className="border-b border-border hover:bg-bg transition-colors">
-                      <td className="px-4 py-3 font-semibold text-text">{item.name}</td>
-                      <td className="px-4 py-3 text-xs text-muted">{item.category}</td>
-                      <td className="px-4 py-3 text-right text-muted tabular-nums">
-                        ¥{item.purchasePrice.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{theoretical}</td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums">
-                        {actual !== null ? actual : <span className="text-faint">—</span>}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${
-                        diff === null ? 'text-faint' : diff < 0 ? 'text-danger' : diff > 0 ? 'text-ok' : 'text-muted'
-                      }`}>
-                        {diff !== null ? (diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-text">
-                        {value !== null ? `¥${value.toLocaleString()}` : <span className="text-faint">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Btn variant="ghost" size="sm" onClick={() => openModal(item)}>
-                          {status === '未確認' ? '入力' : '修正'}
-                        </Btn>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <tr key={item.productId} className="border-b border-border hover:bg-bg transition-colors">
+                        <td className="px-4 py-3 font-semibold text-text">{item.name}</td>
+                        <td className="px-4 py-3 text-xs text-muted">{item.category}</td>
+                        <td className="px-4 py-3 text-right text-muted tabular-nums">
+                          ¥{item.purchasePrice.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">{item.theoretical}</td>
+                        <td className="px-4 py-3 text-right font-bold tabular-nums">
+                          {item.actual !== null ? item.actual : <span className="text-faint">—</span>}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-bold tabular-nums ${
+                          diff === null ? 'text-faint' : diff < 0 ? 'text-danger' : diff > 0 ? 'text-ok' : 'text-muted'
+                        }`}>
+                          {diff !== null ? (diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-text">
+                          {value !== null ? `¥${value.toLocaleString()}` : <span className="text-faint">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant={STATUS_VARIANT[item.status]}>{item.status}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Btn variant="ghost" size="sm" onClick={() => openModal(item)}>
+                            {item.status === '未確認' ? '入力' : '修正'}
+                          </Btn>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </main>
       </div>
 
       {/* 実棚数入力モーダル */}
-      {modal && (
+      {modal && modalItem && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-80 shadow-xl">
-            <p className="text-xs text-muted font-semibold mb-1">{modal.item.category}</p>
-            <p className="text-base font-bold mb-1 leading-snug">{modal.item.name}</p>
+            <p className="text-xs text-muted font-semibold mb-1">{modalItem.category}</p>
+            <p className="text-base font-bold mb-1 leading-snug">{modalItem.name}</p>
             <p className="text-xs text-muted mb-5">
-              理論在庫: {modal.item.theoretical[store]} 個 ·
-              仕入単価: ¥{modal.item.purchasePrice.toLocaleString()}
+              理論在庫: {modalItem.theoretical} 個
+              {modalItem.purchasePrice > 0 && ` · 仕入単価: ¥${modalItem.purchasePrice.toLocaleString()}`}
             </p>
 
             <p className="text-xs font-semibold text-muted mb-2">実棚数を入力</p>
@@ -287,15 +289,14 @@ export function Stocktake() {
               >＋</button>
             </div>
 
-            {/* 差異プレビュー */}
             {(() => {
-              const diff = modal.inputQty - modal.item.theoretical[store]
+              const diff = modal.inputQty - modalItem.theoretical
               return (
                 <p className={`text-center text-sm font-semibold mb-5 ${
                   diff < 0 ? 'text-danger' : diff > 0 ? 'text-ok' : 'text-muted'
                 }`}>
                   差異: {diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff} 個
-                  {' · '}¥{(modal.inputQty * modal.item.purchasePrice).toLocaleString()}
+                  {modalItem.purchasePrice > 0 && ` · ¥${(modal.inputQty * modalItem.purchasePrice).toLocaleString()}`}
                 </p>
               )
             })()}
