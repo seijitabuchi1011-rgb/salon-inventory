@@ -135,6 +135,25 @@ export const useAppStore = create<AppState>()(
         products: state.products,
         stocks: state.stocks,
       }),
+      // localStorageの既存データにない初期商品・在庫を差分追加する
+      merge: (persisted, current) => {
+        const p = persisted as Partial<AppState>
+        const savedProducts = p.products ?? []
+        const savedStocks = p.stocks ?? []
+
+        const addedProducts = initialProducts.filter(
+          (ip) => !savedProducts.some((sp) => sp.id === ip.id)
+        )
+        const addedStocks = initialStocks.filter(
+          (is) => !savedStocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
+        )
+
+        return {
+          ...current,
+          products: [...savedProducts, ...addedProducts],
+          stocks: [...savedStocks, ...addedStocks],
+        }
+      },
     }
   )
 )
