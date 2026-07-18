@@ -42,9 +42,9 @@ export function Stocktake() {
   // 選択店舗でアクティブな商品一覧を組み立て
   const items = products
     .map((p) => {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === store)
-      if (!s || s.active === false) return null
-      const theo = theoretical[store]?.[p.id] ?? s.currentStock
+      const s = stocks.find((st) => st.productId === p.id && st.storeId === store)
+      if (s?.active === false) return null
+      const theo = theoretical[store]?.[p.id] ?? (s?.currentStock ?? 0)
       const actual = actualCounts[store][p.id] ?? null
       const status: ItemStatus =
         actual === null ? '未確認' :
@@ -55,7 +55,7 @@ export function Stocktake() {
         category: p.category,
         purchasePrice: p.purchasePrice ?? 0,
         theoretical: theo,
-        minStock: s.minStock,
+        minStock: s?.minStock ?? 3,
         actual,
         status,
       }
