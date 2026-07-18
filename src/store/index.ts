@@ -12,13 +12,7 @@ export const useAppStore = create<AppState>((set) => ({
   currentStore: 'all',
   setCurrentStore: (store) => set({ currentStore: store }),
   products: [
-    { id: '1',  name: 'ミルボン ジェミールフラン シャンプー 500ml',        category: 'シャンプー',    maker: 'ミルボン',       barcode: '4901234567890', purchasePrice: 1400, sellPrice: 2800 },
-    { id: '2',  name: 'ケラスターゼ ソワン オレオ',                         category: 'トリートメント', maker: 'ケラスターゼ',    barcode: '4901234567891', purchasePrice: 2600, sellPrice: 5200 },
-    { id: '3',  name: 'OWAY カラーマスク ヘナ',                             category: 'カラー剤',      maker: 'OWAY',           barcode: '4901234567892', purchasePrice: 1800, sellPrice: 4500 },
-    { id: '4',  name: 'デミ アドミオオイル',                                category: 'スタイリング',   maker: 'デミ',           barcode: '4901234567893', purchasePrice:  850, sellPrice: 1700 },
-    { id: '5',  name: 'ナプラ ケアテクトHB',                                category: 'シャンプー',    maker: 'ナプラ',         barcode: '4901234567894', purchasePrice: 1100, sellPrice: 2200 },
-    { id: '6',  name: 'アジュバン コンポジオ EX',                           category: 'トリートメント', maker: 'アジュバン',      barcode: '4901234567895', purchasePrice: 3200, sellPrice: 6400 },
-    // カラー剤（2026-07-18 追加）
+    // カラー剤
     { id: '7',  name: 'キャラデコ',                                         category: 'カラー剤',      maker: 'ホーユー',       barcode: '', purchasePrice:  300, sellPrice:  600 },
     { id: '8',  name: 'ライトニングブースター',                              category: 'カラー剤',      maker: 'シュワルツコフ',  barcode: '', purchasePrice: 1760, sellPrice:    0 },
     { id: '9',  name: 'マテリア',                                           category: 'カラー剤',      maker: 'ミルボン',       barcode: '', purchasePrice:  455, sellPrice:  650 },
@@ -40,18 +34,6 @@ export const useAppStore = create<AppState>((set) => ({
     { id: '25', name: 'クリエイティブフェリエネオ',                          category: 'カラー剤',      maker: 'ロレアル',       barcode: '', purchasePrice:  503, sellPrice:    0 },
   ],
   stocks: [
-    { productId: '1',  storeId: 'flag', currentStock:   8, minStock: 5, active: true },
-    { productId: '1',  storeId: 'lien', currentStock:   3, minStock: 4, active: true },
-    { productId: '2',  storeId: 'flag', currentStock:  12, minStock: 3, active: true },
-    { productId: '2',  storeId: 'lien', currentStock:   6, minStock: 3, active: true },
-    { productId: '3',  storeId: 'flag', currentStock:   2, minStock: 5, active: true },
-    { productId: '3',  storeId: 'lien', currentStock:   1, minStock: 3, active: true },
-    { productId: '4',  storeId: 'flag', currentStock:  15, minStock: 5, active: true },
-    { productId: '4',  storeId: 'lien', currentStock:   9, minStock: 5, active: true },
-    { productId: '5',  storeId: 'flag', currentStock:   4, minStock: 6, active: true },
-    { productId: '5',  storeId: 'lien', currentStock:   7, minStock: 4, active: true },
-    { productId: '6',  storeId: 'flag', currentStock:   5, minStock: 3, active: true },
-    { productId: '6',  storeId: 'lien', currentStock:   2, minStock: 4, active: true },
     // カラー剤の在庫（現場在庫数 → flag店、Lien店は0で初期化）
     { productId: '7',  storeId: 'flag', currentStock:  46, minStock: 10, active: true },
     { productId: '7',  storeId: 'lien', currentStock:   0, minStock:  5, active: true },

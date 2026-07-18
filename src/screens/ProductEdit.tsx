@@ -55,8 +55,10 @@ export function ProductEdit() {
   const [sellPrice, setSellPrice] = useState(existing?.sellPrice?.toString() ?? '')
   const [flagStock, setFlagStock] = useState(8)
   const [flagMin, setFlagMin] = useState(5)
+  const [flagActive, setFlagActive] = useState(true)
   const [lienStock, setLienStock] = useState(3)
   const [lienMin, setLienMin] = useState(4)
+  const [lienActive, setLienActive] = useState(true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
 
   const title = existing ? '商品登録・編集' : '商品登録・編集'
@@ -150,7 +152,7 @@ export function ProductEdit() {
                   <TextInput value={purchasePrice} onChange={setPurchasePrice} prefix="¥" placeholder="0" />
                 </Field>
 
-                <Field label="販売価格 (税込)">
+                <Field label="販売価格 (税抜)">
                   <TextInput value={sellPrice} onChange={setSellPrice} prefix="¥" placeholder="0" />
                 </Field>
 
@@ -159,12 +161,12 @@ export function ProductEdit() {
                   <p className="text-sm font-bold mb-3">店舗別の在庫設定</p>
                   <div className="grid grid-cols-2 gap-3">
                     {/* flag */}
-                    <div className="rounded-lg p-3.5 border" style={{ background: '#E6EEF9', borderColor: '#BFD3EC' }}>
+                    <div className={`rounded-lg p-3.5 border transition-opacity ${flagActive ? '' : 'opacity-50'}`} style={{ background: '#E6EEF9', borderColor: '#BFD3EC' }}>
                       <div className="flex items-center gap-1.5 mb-3">
                         <StoreDot store="flag" />
                         <span className="text-xs font-bold text-flag">flag 美容室</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className={`grid grid-cols-2 gap-2 mb-2 ${!flagActive ? 'pointer-events-none' : ''}`}>
                         <Field label="現在庫">
                           <NumberInput value={flagStock} onChange={setFlagStock} />
                         </Field>
@@ -172,19 +174,23 @@ export function ProductEdit() {
                           <NumberInput value={flagMin} onChange={setFlagMin} />
                         </Field>
                       </div>
-                      <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
-                        <span className="w-5 h-5 rounded border-2 border-flag bg-flag flex items-center justify-center text-white text-xs">✓</span>
+                      <button
+                        type="button"
+                        onClick={() => setFlagActive((v) => !v)}
+                        className="flex items-center gap-2 text-xs text-muted cursor-pointer"
+                      >
+                        <span className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${flagActive ? 'border-flag bg-flag text-white' : 'border-border-strong bg-surface text-transparent'}`}>✓</span>
                         この店舗で取り扱う
-                      </label>
+                      </button>
                     </div>
 
                     {/* lien */}
-                    <div className="rounded-lg p-3.5 border" style={{ background: '#F1E8F5', borderColor: '#DDC3E6' }}>
+                    <div className={`rounded-lg p-3.5 border transition-opacity ${lienActive ? '' : 'opacity-50'}`} style={{ background: '#F1E8F5', borderColor: '#DDC3E6' }}>
                       <div className="flex items-center gap-1.5 mb-3">
                         <StoreDot store="lien" />
                         <span className="text-xs font-bold text-lien">Lien 美容室</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className={`grid grid-cols-2 gap-2 mb-2 ${!lienActive ? 'pointer-events-none' : ''}`}>
                         <Field label="現在庫">
                           <NumberInput value={lienStock} onChange={setLienStock} />
                         </Field>
@@ -192,10 +198,14 @@ export function ProductEdit() {
                           <NumberInput value={lienMin} onChange={setLienMin} />
                         </Field>
                       </div>
-                      <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
-                        <span className="w-5 h-5 rounded border-2 border-lien bg-lien flex items-center justify-center text-white text-xs">✓</span>
+                      <button
+                        type="button"
+                        onClick={() => setLienActive((v) => !v)}
+                        className="flex items-center gap-2 text-xs text-muted cursor-pointer"
+                      >
+                        <span className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${lienActive ? 'border-lien bg-lien text-white' : 'border-border-strong bg-surface text-transparent'}`}>✓</span>
                         この店舗で取り扱う
-                      </label>
+                      </button>
                     </div>
                   </div>
                 </div>
