@@ -155,7 +155,12 @@ export function ProductEdit() {
                     className="h-btn-md border border-border-strong rounded-md px-4 text-sm bg-surface text-text outline-none focus:border-accent"
                   >
                     <option value="">選択してください</option>
-                    {['シャンプー', 'トリートメント', 'カラー剤', 'スタイリング', 'オイル'].map((c) => (
+                    {[
+                      'カラー剤', 'ブリーチ剤', 'カラーオキシ',
+                      'パーマ剤', 'プレックス剤', '髪ドラ',
+                      'oggi otto', 'H2', '処理剤', '小物類',
+                      'シャンプー', 'トリートメント', 'スタイリング', 'オイル',
+                    ].map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
