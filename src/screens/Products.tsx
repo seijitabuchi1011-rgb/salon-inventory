@@ -27,7 +27,7 @@ const CATEGORIES = [
   'カラー剤', 'ブリーチ剤', 'カラーオキシ',
   'パーマ剤', 'プレックス剤', '髪ドラ',
   'oggi otto', 'H2', '処理剤', '小物類',
-  'シャンプー', 'トリートメント', 'スタイリング', 'オイル',
+  'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
 ]
 
 function stockStatus(current: number, min: number): { label: string; variant: 'danger' | 'warn' | 'ok' } {

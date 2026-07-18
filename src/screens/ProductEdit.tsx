@@ -184,7 +184,7 @@ export function ProductEdit() {
                       'カラー剤', 'ブリーチ剤', 'カラーオキシ',
                       'パーマ剤', 'プレックス剤', '髪ドラ',
                       'oggi otto', 'H2', '処理剤', '小物類',
-                      'シャンプー', 'トリートメント', 'スタイリング', 'オイル',
+                      'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
                     ].map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
@@ -192,7 +192,24 @@ export function ProductEdit() {
                 </Field>
 
                 <Field label="メーカー">
-                  <TextInput value={maker} onChange={setMaker} placeholder="メーカー名" />
+                  <select
+                    value={maker}
+                    onChange={(e) => setMaker(e.target.value)}
+                    className="h-btn-md border border-border-strong rounded-md px-4 text-sm bg-surface text-text outline-none focus:border-accent"
+                  >
+                    <option value="">選択してください</option>
+                    {[
+                      'ナカノ', 'フィヨーレ', 'テクノエイト', 'ルベル', '資生堂',
+                      'シュワルツコフ', 'ウェラ', 'ミルボン', 'アリミノ', 'ロレアル',
+                      'ナプラ', '田村治照堂', 'デミコスメティック', 'タマリス', 'b-ex',
+                      'ナンバースリー', 'ワイマック', 'ホーユー', 'ピュアセラボ', 'パイモア',
+                      'ミアン', 'ハホニコ', 'MADENA', 'アンダー７', 'STRI',
+                      'MTG', 'STELLA', 'アマトラ', 'マーキュリー', 'TIME',
+                      'サンコール', 'GO-ON', 'LOA', '髪ドラ',
+                    ].map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
                 </Field>
 
                 <Field label="仕入価格 (税抜)">
