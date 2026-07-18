@@ -44,8 +44,10 @@ function NumberInput({ value, onChange }: { value: number; onChange: (v: number)
 export function ProductEdit() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { products, upsertProduct, upsertStock } = useAppStore()
+  const { products, stocks, upsertProduct, upsertStock } = useAppStore()
   const existing = id && id !== 'new' ? products.find((p) => p.id === id) : undefined
+  const existingFlagStock = existing ? stocks.find((s) => s.productId === existing.id && s.storeId === 'flag') : undefined
+  const existingLienStock = existing ? stocks.find((s) => s.productId === existing.id && s.storeId === 'lien') : undefined
 
   const [name, setName] = useState(existing?.name ?? '')
   const [category, setCategory] = useState(existing?.category ?? '')
@@ -53,12 +55,12 @@ export function ProductEdit() {
   const [barcode, setBarcode] = useState(existing?.barcode ?? '')
   const [purchasePrice, setPurchasePrice] = useState(existing?.purchasePrice?.toString() ?? '')
   const [sellPrice, setSellPrice] = useState(existing?.sellPrice?.toString() ?? '')
-  const [flagStock, setFlagStock] = useState(8)
-  const [flagMin, setFlagMin] = useState(5)
-  const [flagActive, setFlagActive] = useState(true)
-  const [lienStock, setLienStock] = useState(3)
-  const [lienMin, setLienMin] = useState(4)
-  const [lienActive, setLienActive] = useState(true)
+  const [flagStock, setFlagStock] = useState(existingFlagStock?.currentStock ?? 0)
+  const [flagMin, setFlagMin] = useState(existingFlagStock?.minStock ?? 3)
+  const [flagActive, setFlagActive] = useState(existingFlagStock?.active ?? true)
+  const [lienStock, setLienStock] = useState(existingLienStock?.currentStock ?? 0)
+  const [lienMin, setLienMin] = useState(existingLienStock?.minStock ?? 3)
+  const [lienActive, setLienActive] = useState(existingLienStock?.active ?? true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
 
   const title = existing ? '商品登録・編集' : '商品登録・編集'
