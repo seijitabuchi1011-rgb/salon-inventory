@@ -17,14 +17,15 @@ export interface Product {
 export interface StaffPurchase {
   id: string
   date: string
-  productId: string
+  productId: string        // empty string for manual entries
   quantity: number
-  sellPriceAtPurchase: number
+  sellPriceAtPurchase: number  // pre-tax for catalog items; tax-included for manual items
   taxRate: 8 | 10
   purchasedBy: string
   recordedBy: string
   storeId: StoreId
   timestamp: number
+  manualProductName?: string  // set when productId is empty (manual free-text entry)
 }
 
 export interface StoreStock {

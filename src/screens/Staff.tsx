@@ -22,6 +22,13 @@ type QuickAdd = {
   taxRate: 8 | 10
 }
 
+// 商品一覧にない場合の手動入力（カタログ登録なし）
+type ManualEntry = {
+  name: string
+  priceIncTax: string  // 税込価格を直接入力
+  taxRate: 8 | 10
+}
+
 function taxIncluded(price: number, rate: 8 | 10) {
   return Math.round(price * (rate === 10 ? 1.1 : 1.08))
 }
@@ -55,6 +62,7 @@ export function StaffScreen() {
   const [showBuyerDrop, setShowBuyerDrop] = useState(false)
   const [showRecorderDrop, setShowRecorderDrop] = useState(false)
   const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
+  const [manualEntry, setManualEntry] = useState<ManualEntry | null>(null)
 
   const selectedProduct = form.productId ? products.find((p) => p.id === form.productId) : null
 
@@ -75,9 +83,14 @@ export function StaffScreen() {
     setShowBuyerDrop(false)
     setShowRecorderDrop(false)
     setQuickAdd(null)
+    setManualEntry(null)
     setShowModal(true)
   }
-  function closeModal() { setShowModal(false); setQuickAdd(null) }
+  function closeModal() {
+    setShowModal(false)
+    setQuickAdd(null)
+    setManualEntry(null)
+  }
 
   function handleQuickAddSave() {
     if (!quickAdd || !quickAdd.name || !quickAdd.category) return
@@ -98,29 +111,47 @@ export function StaffScreen() {
   }
 
   function handleSubmit() {
-    if (!form.productId || !selectedProduct || !form.purchasedBy || !form.recordedBy) return
-    if (form.purchasedBy && !staffMembers.includes(form.purchasedBy)) addStaffMember(form.purchasedBy)
-    if (form.recordedBy && !staffMembers.includes(form.recordedBy)) addStaffMember(form.recordedBy)
+    if (!form.purchasedBy || !form.recordedBy) return
+    if (!staffMembers.includes(form.purchasedBy)) addStaffMember(form.purchasedBy)
+    if (!staffMembers.includes(form.recordedBy)) addStaffMember(form.recordedBy)
     const ts = new Date(form.date).getTime()
-    addStaffPurchase({
-      date: form.date,
-      productId: form.productId,
-      quantity: form.quantity,
-      sellPriceAtPurchase: selectedProduct.sellPrice,
-      taxRate: selectedProduct.taxRate ?? 10,
-      purchasedBy: form.purchasedBy,
-      recordedBy: form.recordedBy,
-      storeId: form.storeId,
-    })
-    // 払出しとしてトランザクション記録 → 販売実績・払出数に反映
-    addTransaction({ type: 'dispense', productId: form.productId, storeId: form.storeId, quantity: form.quantity, timestamp: ts })
-    // 在庫を減算
-    const s = stocks.find((st) => st.productId === form.productId && st.storeId === form.storeId)
-    upsertStock({ productId: form.productId, storeId: form.storeId, currentStock: Math.max(0, (s?.currentStock ?? 0) - form.quantity), minStock: s?.minStock ?? 3, active: s?.active ?? true })
+
+    if (manualEntry && manualEntry.name && manualEntry.priceIncTax) {
+      // 手動入力（カタログにない商品）: 税込価格を直接保存
+      addStaffPurchase({
+        date: form.date,
+        productId: '',
+        quantity: form.quantity,
+        sellPriceAtPurchase: Number(manualEntry.priceIncTax) || 0,
+        taxRate: manualEntry.taxRate,
+        purchasedBy: form.purchasedBy,
+        recordedBy: form.recordedBy,
+        storeId: form.storeId,
+        manualProductName: manualEntry.name,
+      })
+    } else if (form.productId && selectedProduct) {
+      // カタログ商品: 仕入価格(税抜)を保存 → 表示時に税込計算
+      addStaffPurchase({
+        date: form.date,
+        productId: form.productId,
+        quantity: form.quantity,
+        sellPriceAtPurchase: selectedProduct.purchasePrice,
+        taxRate: selectedProduct.taxRate ?? 10,
+        purchasedBy: form.purchasedBy,
+        recordedBy: form.recordedBy,
+        storeId: form.storeId,
+      })
+      // 払出しとして記録 → 在庫・払出数に反映
+      addTransaction({ type: 'dispense', productId: form.productId, storeId: form.storeId, quantity: form.quantity, timestamp: ts })
+      const s = stocks.find((st) => st.productId === form.productId && st.storeId === form.storeId)
+      upsertStock({ productId: form.productId, storeId: form.storeId, currentStock: Math.max(0, (s?.currentStock ?? 0) - form.quantity), minStock: s?.minStock ?? 3, active: s?.active ?? true })
+    }
     closeModal()
   }
 
-  const canSubmit = !!form.productId && !!form.purchasedBy && !!form.recordedBy && form.quantity > 0
+  const canSubmit =
+    (!!form.productId || (!!manualEntry?.name && !!manualEntry?.priceIncTax)) &&
+    !!form.purchasedBy && !!form.recordedBy && form.quantity > 0
 
   return (
     <div className="flex flex-col h-full">
@@ -154,7 +185,7 @@ export function StaffScreen() {
                   <tr>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">日付</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">販売価格(税込)</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">仕入価格(税込)</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">数量</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">購入者</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">記入した人</th>
@@ -164,13 +195,18 @@ export function StaffScreen() {
                 <tbody>
                   {staffPurchases.map((sp) => {
                     const p = products.find((pr) => pr.id === sp.productId)
-                    const incTax = taxIncluded(sp.sellPriceAtPurchase, sp.taxRate)
+                    const displayName = sp.manualProductName ?? p?.name ?? '不明商品'
+                    const displayCategory = sp.manualProductName ? '手動入力' : (p?.category ?? '')
+                    // 手動入力は sellPriceAtPurchase が既に税込、カタログ品は税抜から計算
+                    const incTax = sp.manualProductName
+                      ? sp.sellPriceAtPurchase
+                      : taxIncluded(sp.sellPriceAtPurchase, sp.taxRate)
                     return (
                       <tr key={sp.id} className="border-b border-border hover:bg-bg transition-colors">
                         <td className="px-4 py-3 text-xs text-muted font-mono">{sp.date}</td>
                         <td className="px-4 py-3 font-semibold text-text">
-                          <p>{p?.name ?? '不明商品'}</p>
-                          <p className="text-2xs text-faint">{p?.category ?? ''}</p>
+                          <p>{displayName}</p>
+                          <p className="text-2xs text-faint">{displayCategory}</p>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums font-bold">
                           ¥{incTax.toLocaleString()}
@@ -242,11 +278,12 @@ export function StaffScreen() {
             {/* 商品選択 */}
             <div className="relative">
               <label className="text-xs font-semibold text-muted mb-1.5 block">商品</label>
+
+              {/* ① カタログ新規登録フォーム */}
               {quickAdd ? (
-                /* 新規商品クイック登録フォーム */
                 <div className="border border-ok rounded-lg p-4 bg-ok-soft flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-ok">新規商品を登録</p>
+                    <p className="text-xs font-bold text-ok">新規商品をカタログに登録</p>
                     <button onMouseDown={() => setQuickAdd(null)} className="text-xs text-muted hover:text-text">キャンセル</button>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -293,9 +330,7 @@ export function StaffScreen() {
                       <label className="text-2xs text-muted mb-1 block">税率</label>
                       <div className="flex gap-2">
                         {([10, 8] as const).map((r) => (
-                          <button
-                            key={r}
-                            type="button"
+                          <button key={r} type="button"
                             onMouseDown={() => setQuickAdd((q) => q && { ...q, taxRate: r })}
                             className={`flex-1 h-8 rounded-md text-xs font-bold border-2 transition-colors ${
                               quickAdd.taxRate === r ? 'bg-ok text-white border-ok' : 'bg-surface text-muted border-border'
@@ -307,20 +342,66 @@ export function StaffScreen() {
                       </div>
                     </div>
                   </div>
-                  <Btn
-                    variant="primary"
-                    onClick={handleQuickAddSave}
-                    disabled={!quickAdd.name || !quickAdd.category}
-                  >
-                    ✓ 登録してこの商品を選択
+                  <Btn variant="primary" onClick={handleQuickAddSave} disabled={!quickAdd.name || !quickAdd.category}>
+                    ✓ カタログに登録してこの商品を選択
                   </Btn>
                 </div>
+
+              /* ② 手動入力フォーム（カタログ登録なし） */
+              ) : manualEntry ? (
+                <div className="border border-accent rounded-lg p-4 bg-accent-soft flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-accent">手動入力（カタログ登録なし）</p>
+                    <button onMouseDown={() => setManualEntry(null)} className="text-xs text-muted hover:text-text">キャンセル</button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div>
+                      <label className="text-2xs text-muted mb-1 block">商品名 *</label>
+                      <input
+                        value={manualEntry.name}
+                        onChange={(e) => setManualEntry((m) => m && { ...m, name: e.target.value })}
+                        placeholder="商品名を入力"
+                        className="w-full h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-2xs text-muted mb-1 block">価格（税込） *</label>
+                      <div className="flex items-center h-9 border border-border-strong rounded-md px-3 bg-surface focus-within:border-accent">
+                        <span className="text-faint text-sm mr-1">¥</span>
+                        <input
+                          value={manualEntry.priceIncTax}
+                          onChange={(e) => setManualEntry((m) => m && { ...m, priceIncTax: e.target.value })}
+                          placeholder="0"
+                          inputMode="numeric"
+                          className="flex-1 text-sm bg-transparent outline-none text-text"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-2xs text-muted mb-1 block">税率（記録用）</label>
+                      <div className="flex gap-2">
+                        {([10, 8] as const).map((r) => (
+                          <button key={r} type="button"
+                            onMouseDown={() => setManualEntry((m) => m && { ...m, taxRate: r })}
+                            className={`flex-1 h-8 rounded-md text-xs font-bold border-2 transition-colors ${
+                              manualEntry.taxRate === r ? 'bg-accent text-white border-accent' : 'bg-surface text-muted border-border'
+                            }`}
+                          >
+                            {r}% {r === 10 ? '標準' : '軽減'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              /* ③ カタログ商品選択済み */
               ) : selectedProduct ? (
                 <div className="border border-accent rounded-md p-3 bg-accent-soft flex items-center gap-3">
                   <div className="flex-1">
                     <p className="text-sm font-bold text-text">{selectedProduct.name}</p>
                     <p className="text-xs text-muted mt-0.5">
-                      販売価格 税込 ¥{taxIncluded(selectedProduct.sellPrice, selectedProduct.taxRate ?? 10).toLocaleString()}
+                      仕入価格 税込 ¥{taxIncluded(selectedProduct.purchasePrice, selectedProduct.taxRate ?? 10).toLocaleString()}
                       <span className="ml-2">({selectedProduct.taxRate ?? 10}%)</span>
                     </p>
                   </div>
@@ -331,6 +412,8 @@ export function StaffScreen() {
                     ✕ 変更
                   </button>
                 </div>
+
+              /* ④ 未選択（検索ドロップダウン） */
               ) : (
                 <>
                   <input
@@ -342,7 +425,7 @@ export function StaffScreen() {
                     className="w-full h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
                   />
                   {showProductDrop && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-md shadow-lg z-20 max-h-48 overflow-y-auto">
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-md shadow-lg z-20 max-h-56 overflow-y-auto">
                       {dropProducts.map((p) => (
                         <button
                           key={p.id}
@@ -351,21 +434,34 @@ export function StaffScreen() {
                         >
                           <span className="font-medium truncate">{p.name}</span>
                           <span className="text-xs text-muted ml-2 flex-shrink-0">
-                            ¥{taxIncluded(p.sellPrice, p.taxRate ?? 10).toLocaleString()} 税込
+                            仕入 ¥{taxIncluded(p.purchasePrice, p.taxRate ?? 10).toLocaleString()} 税込
                           </span>
                         </button>
                       ))}
+                      {/* 商品が見つからない場合の2つのオプション */}
                       {form.productSearch.length > 0 && (
-                        <button
-                          onMouseDown={() => {
-                            setQuickAdd({ name: form.productSearch, category: '', purchasePrice: '', sellPrice: '', taxRate: 10 })
-                            setShowProductDrop(false)
-                          }}
-                          className="w-full text-left px-3 py-2.5 text-sm text-ok font-semibold hover:bg-ok-soft flex items-center gap-2 border-t border-border"
-                        >
-                          <span>＋</span>
-                          <span>「{form.productSearch}」を新規商品として登録</span>
-                        </button>
+                        <div className="border-t border-border">
+                          <button
+                            onMouseDown={() => {
+                              setManualEntry({ name: form.productSearch, priceIncTax: '', taxRate: 10 })
+                              setShowProductDrop(false)
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-sm text-accent font-semibold hover:bg-accent-soft flex items-center gap-2 border-b border-border"
+                          >
+                            <span>✏</span>
+                            <span>「{form.productSearch}」を手動入力（商品名・価格）</span>
+                          </button>
+                          <button
+                            onMouseDown={() => {
+                              setQuickAdd({ name: form.productSearch, category: '', purchasePrice: '', sellPrice: '', taxRate: 10 })
+                              setShowProductDrop(false)
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-sm text-ok font-semibold hover:bg-ok-soft flex items-center gap-2"
+                          >
+                            <span>＋</span>
+                            <span>「{form.productSearch}」をカタログに新規登録</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -409,13 +505,9 @@ export function StaffScreen() {
               {showBuyerDrop && buyerSuggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-md shadow-lg z-20">
                   {buyerSuggestions.map((m) => (
-                    <button
-                      key={m}
-                      onMouseDown={() => setForm((f) => ({ ...f, purchasedBy: m }))}
+                    <button key={m} onMouseDown={() => setForm((f) => ({ ...f, purchasedBy: m }))}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-bg border-b border-border last:border-0"
-                    >
-                      {m}
-                    </button>
+                    >{m}</button>
                   ))}
                 </div>
               )}
@@ -435,27 +527,26 @@ export function StaffScreen() {
               {showRecorderDrop && recorderSuggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-md shadow-lg z-20">
                   {recorderSuggestions.map((m) => (
-                    <button
-                      key={m}
-                      onMouseDown={() => setForm((f) => ({ ...f, recordedBy: m }))}
+                    <button key={m} onMouseDown={() => setForm((f) => ({ ...f, recordedBy: m }))}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-bg border-b border-border last:border-0"
-                    >
-                      {m}
-                    </button>
+                    >{m}</button>
                   ))}
                 </div>
               )}
             </div>
 
             {/* 合計プレビュー */}
-            {selectedProduct && (
+            {(selectedProduct || (manualEntry?.name && manualEntry?.priceIncTax)) && (
               <Card className="bg-bg">
                 <p className="text-xs text-muted mb-1">購入金額 (税込)</p>
                 <p className="text-2xl font-bold text-accent tabular-nums">
-                  ¥{(taxIncluded(selectedProduct.sellPrice, selectedProduct.taxRate ?? 10) * form.quantity).toLocaleString()}
+                  {selectedProduct
+                    ? `¥${(taxIncluded(selectedProduct.purchasePrice, selectedProduct.taxRate ?? 10) * form.quantity).toLocaleString()}`
+                    : `¥${((Number(manualEntry?.priceIncTax) || 0) * form.quantity).toLocaleString()}`
+                  }
                 </p>
                 <p className="text-xs text-faint mt-0.5">
-                  {selectedProduct.name} × {form.quantity} 個
+                  {selectedProduct ? selectedProduct.name : manualEntry?.name} × {form.quantity} 個
                 </p>
               </Card>
             )}
