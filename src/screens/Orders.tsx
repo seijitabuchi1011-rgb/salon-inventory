@@ -51,7 +51,8 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     if (delta !== 0) {
       addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
     }
-    if (delta < 0 && appSettings.notifyLowStock && next <= (s?.minStock ?? 3)) {
+    const notifyThisStore = storeId === 'flag' ? (appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock) : (appSettings.notifyLowStockLien ?? appSettings.notifyLowStock)
+    if (delta < 0 && notifyThisStore && next <= (s?.minStock ?? 3)) {
       const p = products.find((pr) => pr.id === productId)
       sendNotification(
         '在庫不足アラート',
@@ -81,7 +82,8 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
       : Math.max(0, modal.currentStock - modal.quantity)
     upsertStock({ productId: modal.productId, storeId: modal.storeId, currentStock: newStock, minStock: modal.minStock, active: modal.active })
     addTransaction({ type: isReceive ? 'receive' : 'dispense', productId: modal.productId, storeId: modal.storeId, quantity: modal.quantity })
-    if (!isReceive && appSettings.notifyLowStock && newStock <= modal.minStock) {
+    const notifyThisStore = modal.storeId === 'flag' ? (appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock) : (appSettings.notifyLowStockLien ?? appSettings.notifyLowStock)
+    if (!isReceive && notifyThisStore && newStock <= modal.minStock) {
       sendNotification(
         '在庫不足アラート',
         `${modal.productName} の在庫が下限を下回りました。\n店舗: ${modal.storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}\n現在庫: ${newStock} 個（下限: ${modal.minStock} 個）`

@@ -15,9 +15,9 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   return (
     <button
       onClick={() => onChange(!value)}
-      className={`relative w-11 h-6 rounded-full transition-colors ${value ? 'bg-accent' : 'bg-border'}`}
+      className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${value ? 'bg-accent' : 'bg-border'}`}
     >
-      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      <span className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow transition-transform ${value ? 'translate-x-[20px]' : 'translate-x-0'}`} />
     </button>
   )
 }
@@ -84,7 +84,8 @@ export function Settings() {
   const [lienMin, setLienMin] = useState(appSettings.lienMinStock)
 
   // 通知設定ローカル状態
-  const [notifyLowStock, setNotifyLowStock] = useState(appSettings.notifyLowStock)
+  const [notifyLowStockFlag, setNotifyLowStockFlag] = useState(appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock)
+  const [notifyLowStockLien, setNotifyLowStockLien] = useState(appSettings.notifyLowStockLien ?? appSettings.notifyLowStock)
   const [notifyOrder, setNotifyOrder] = useState(appSettings.notifyOrder)
   const [notifyTransfer, setNotifyTransfer] = useState(appSettings.notifyTransfer)
   const [notifyStocktake, setNotifyStocktake] = useState(appSettings.notifyStocktake)
@@ -106,7 +107,14 @@ export function Settings() {
   }
 
   function saveNotifySettings() {
-    setAppSettings({ notifyLowStock, notifyOrder, notifyTransfer, notifyStocktake })
+    setAppSettings({
+      notifyLowStockFlag,
+      notifyLowStockLien,
+      notifyLowStock: notifyLowStockFlag || notifyLowStockLien,
+      notifyOrder,
+      notifyTransfer,
+      notifyStocktake,
+    })
     showToast('通知設定を保存しました')
   }
 
@@ -371,9 +379,27 @@ export function Settings() {
                 <>
                   <h2 className="text-lg font-bold">通知設定</h2>
                   <Card>
-                    <Row label="在庫不足アラート" sub="下限を下回った商品が発生したとき">
-                      <Toggle value={notifyLowStock} onChange={setNotifyLowStock} />
-                    </Row>
+                    {/* 在庫不足アラート — 店舗別 */}
+                    <div className="py-3.5 border-b border-border">
+                      <p className="text-sm font-semibold text-text mb-0.5">在庫不足アラート</p>
+                      <p className="text-xs text-faint mb-3">下限を下回った商品が発生したとき</p>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <StoreDot store="flag" />
+                            <span className="text-sm text-text">flag 美容室</span>
+                          </div>
+                          <Toggle value={notifyLowStockFlag} onChange={setNotifyLowStockFlag} />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <StoreDot store="lien" />
+                            <span className="text-sm text-text">Lien 美容室</span>
+                          </div>
+                          <Toggle value={notifyLowStockLien} onChange={setNotifyLowStockLien} />
+                        </div>
+                      </div>
+                    </div>
                     <Row label="入荷・発注通知" sub="発注ステータスが変更されたとき">
                       <Toggle value={notifyOrder} onChange={setNotifyOrder} />
                     </Row>

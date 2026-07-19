@@ -12,6 +12,8 @@ export interface AppSettings {
   flagMinStock: number
   lienMinStock: number
   notifyLowStock: boolean
+  notifyLowStockFlag: boolean
+  notifyLowStockLien: boolean
   notifyOrder: boolean
   notifyTransfer: boolean
   notifyStocktake: boolean
@@ -26,6 +28,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   flagMinStock: 5,
   lienMinStock: 3,
   notifyLowStock: true,
+  notifyLowStockFlag: true,
+  notifyLowStockLien: true,
   notifyOrder: true,
   notifyTransfer: false,
   notifyStocktake: true,
