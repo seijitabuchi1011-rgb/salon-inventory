@@ -11,26 +11,34 @@ import { Sales } from './screens/Sales'
 import { MonthlyPurchases } from './screens/MonthlyPurchases'
 import { StaffScreen } from './screens/Staff'
 import { Settings } from './screens/Settings'
+import { useFirestoreSync } from './hooks/useFirestoreSync'
+
+function AppRoutes() {
+  useFirestoreSync()
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/scan" element={<Scan />} />
+      <Route path="/products" element={<Products />} />
+      <Route path="/products/new" element={<ProductEdit />} />
+      <Route path="/products/:id" element={<ProductEdit />} />
+      <Route path="/low-stock" element={<LowStock />} />
+      <Route path="/orders" element={<Orders fixedMode="receive" />} />
+      <Route path="/dispense" element={<Orders fixedMode="dispense" />} />
+      <Route path="/stocktake" element={<Stocktake />} />
+      <Route path="/transfer" element={<Transfer />} />
+      <Route path="/sales" element={<Sales />} />
+      <Route path="/monthly-purchases" element={<MonthlyPurchases />} />
+      <Route path="/staff" element={<StaffScreen />} />
+      <Route path="/settings" element={<Settings />} />
+    </Routes>
+  )
+}
 
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/scan" element={<Scan />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/products/new" element={<ProductEdit />} />
-        <Route path="/products/:id" element={<ProductEdit />} />
-        <Route path="/low-stock" element={<LowStock />} />
-        <Route path="/orders" element={<Orders fixedMode="receive" />} />
-        <Route path="/dispense" element={<Orders fixedMode="dispense" />} />
-        <Route path="/stocktake" element={<Stocktake />} />
-        <Route path="/transfer" element={<Transfer />} />
-        <Route path="/sales" element={<Sales />} />
-        <Route path="/monthly-purchases" element={<MonthlyPurchases />} />
-        <Route path="/staff" element={<StaffScreen />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
+      <AppRoutes />
     </BrowserRouter>
   )
 }

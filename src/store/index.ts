@@ -31,6 +31,18 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   notifyStocktake: true,
 }
 
+// Firestore に保存するデータ型（画像は除外）
+export interface FirestoreData {
+  products: Product[]
+  stocks: StoreStock[]
+  transactions: Transaction[]
+  transfers: Transfer[]
+  staffPurchases: StaffPurchase[]
+  staffMembers: string[]
+  storeInfo: { flag: StoreInfo; lien: StoreInfo }
+  appSettings: AppSettings
+}
+
 interface AppState {
   currentStore: StoreFilter
   setCurrentStore: (store: StoreFilter) => void
@@ -61,6 +73,7 @@ interface AppState {
   addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
   staffMembers: string[]
   addStaffMember: (name: string) => void
+  loadFromFirestore: (data: FirestoreData) => void
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -990,6 +1003,21 @@ export const useAppStore = create<AppState>()(
           staffMembers: state.staffMembers.includes(name)
             ? state.staffMembers
             : [...state.staffMembers, name],
+        })),
+      loadFromFirestore: (data) =>
+        set((state) => ({
+          products: data.products.map((fp) => ({
+            ...fp,
+            // 画像はデバイスローカル (localStorage) にのみ保存 — Firestore には入れない
+            image: state.products.find((lp) => lp.id === fp.id)?.image,
+          })),
+          stocks: data.stocks ?? state.stocks,
+          transactions: data.transactions ?? state.transactions,
+          transfers: data.transfers ?? state.transfers,
+          staffPurchases: data.staffPurchases ?? state.staffPurchases,
+          staffMembers: data.staffMembers ?? state.staffMembers,
+          storeInfo: data.storeInfo ?? state.storeInfo,
+          appSettings: data.appSettings ?? state.appSettings,
         })),
     }),
     {
