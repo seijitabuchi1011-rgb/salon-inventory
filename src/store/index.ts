@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { StoreFilter, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase } from '../types'
+import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase } from '../types'
 
 export interface StoreInfo {
   name: string
@@ -69,6 +69,8 @@ interface AppState {
   addTransfer: (t: Omit<Transfer, 'id' | 'createdAt' | 'status'>) => void
   approveTransfer: (id: string) => void
   rejectTransfer: (id: string) => void
+  directTransfer: (fromStore: StoreId, toStore: StoreId, productId: string, quantity: number, memo?: string) => void
+  deleteTransfer: (id: string) => void
   staffPurchases: StaffPurchase[]
   addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
   staffMembers: string[]
@@ -989,6 +991,43 @@ export const useAppStore = create<AppState>()(
             t.id === id ? { ...t, status: '却下' as TransferStatus } : t
           ),
         })),
+      directTransfer: (fromStore, toStore, productId, quantity, memo) =>
+        set((state) => {
+          const id = `TR-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+          const newTransfer: Transfer = {
+            id, fromStore, toStore,
+            createdAt: new Date().toISOString().slice(0, 10),
+            status: '承認済',
+            items: [{ productId, quantity }],
+            ...(memo ? { memo } : {}),
+          }
+          let stocks = state.stocks.map((s) => {
+            if (s.productId !== productId) return s
+            if (s.storeId === fromStore) return { ...s, currentStock: Math.max(0, s.currentStock - quantity) }
+            if (s.storeId === toStore) return { ...s, currentStock: s.currentStock + quantity }
+            return s
+          })
+          if (!stocks.some((s) => s.productId === productId && s.storeId === toStore)) {
+            stocks = [...stocks, { productId, storeId: toStore, currentStock: quantity, minStock: 3, active: true }]
+          }
+          return { transfers: [newTransfer, ...state.transfers], stocks }
+        }),
+      deleteTransfer: (id) =>
+        set((state) => {
+          const tr = state.transfers.find((t) => t.id === id)
+          if (!tr) return state
+          let stocks = state.stocks
+          if (tr.status === '承認済') {
+            stocks = state.stocks.map((s) => {
+              const item = tr.items.find((i) => i.productId === s.productId)
+              if (!item) return s
+              if (s.storeId === tr.fromStore) return { ...s, currentStock: s.currentStock + item.quantity }
+              if (s.storeId === tr.toStore) return { ...s, currentStock: Math.max(0, s.currentStock - item.quantity) }
+              return s
+            })
+          }
+          return { transfers: state.transfers.filter((t) => t.id !== id), stocks }
+        }),
       staffPurchases: [],
       addStaffPurchase: (p) =>
         set((state) => ({
