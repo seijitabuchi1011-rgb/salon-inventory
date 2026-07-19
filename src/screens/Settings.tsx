@@ -7,8 +7,8 @@ import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
 import type { StoreInfo } from '../store'
 
-type Section = '店舗設定' | '在庫アラート' | '通知設定' | 'データ管理'
-const SECTIONS: Section[] = ['店舗設定', '在庫アラート', '通知設定', 'データ管理']
+type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'データ管理'
+const SECTIONS: Section[] = ['店舗設定', 'スタッフ管理', '在庫アラート', '通知設定', 'データ管理']
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -67,10 +67,12 @@ export function Settings() {
     products, stocks, transactions, staffPurchases,
     storeInfo, setStoreInfo,
     appSettings, setAppSettings,
+    staffMembers, addStaffMember, removeStaffMember,
   } = useAppStore()
 
   const [section, setSection] = useState<Section>('店舗設定')
   const [toast, setToast] = useState('')
+  const [newStaffName, setNewStaffName] = useState('')
 
   // 店舗設定ローカル状態
   const [flag, setFlag] = useState<StoreInfo>({ ...storeInfo.flag })
@@ -253,6 +255,64 @@ export function Settings() {
                   <div className="flex justify-end">
                     <Btn variant="primary" onClick={saveStoreInfo}>変更を保存</Btn>
                   </div>
+                </>
+              )}
+
+              {/* スタッフ管理 */}
+              {section === 'スタッフ管理' && (
+                <>
+                  <div>
+                    <h2 className="text-lg font-bold">スタッフ管理</h2>
+                    <p className="text-sm text-muted mt-1">登録したスタッフは購入履歴の購入者・記入者に反映されます。</p>
+                  </div>
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-3">登録スタッフ一覧（{staffMembers.length} 名）</p>
+                    {staffMembers.length === 0 ? (
+                      <p className="text-sm text-faint py-4 text-center">まだスタッフが登録されていません</p>
+                    ) : (
+                      <div className="flex flex-col divide-y divide-border">
+                        {staffMembers.map((name) => (
+                          <div key={name} className="flex items-center justify-between py-3">
+                            <span className="text-sm font-semibold text-text">{name}</span>
+                            <button
+                              onClick={() => removeStaffMember(name)}
+                              className="text-xs text-danger hover:bg-danger-soft px-2 py-1 rounded transition-colors"
+                            >
+                              削除
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-3 pt-3 border-t border-border flex gap-2">
+                      <input
+                        value={newStaffName}
+                        onChange={(e) => setNewStaffName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newStaffName.trim()) {
+                            addStaffMember(newStaffName.trim())
+                            setNewStaffName('')
+                            showToast('スタッフを追加しました')
+                          }
+                        }}
+                        placeholder="スタッフ名を入力"
+                        className="flex-1 h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
+                      />
+                      <Btn
+                        variant="primary"
+                        size="sm"
+                        disabled={!newStaffName.trim()}
+                        onClick={() => {
+                          if (!newStaffName.trim()) return
+                          addStaffMember(newStaffName.trim())
+                          setNewStaffName('')
+                          showToast('スタッフを追加しました')
+                        }}
+                      >
+                        ＋ 追加
+                      </Btn>
+                    </div>
+                  </Card>
                 </>
               )}
 

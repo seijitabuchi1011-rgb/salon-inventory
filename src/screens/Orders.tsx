@@ -26,7 +26,9 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, upsertStock, addTransaction } = useAppStore()
+  const { products, stocks, upsertStock, addTransaction, currentStore } = useAppStore()
+  const showFlag = currentStore === 'all' || currentStore === 'flag'
+  const showLien = currentStore === 'all' || currentStore === 'lien'
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
   const setTab = fixedMode ? () => {} : setTabState
@@ -243,26 +245,30 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#2B5FA7' }}>
-                    flag
-                  </th>
-                  <th className="w-36 px-2 py-3 text-center">
-                    <div className="flex items-center gap-1 justify-center">
-                      <span className="text-xs text-danger font-semibold">−</span>
-                      <span className="text-xs text-muted font-semibold">/</span>
-                      <span className="text-xs text-ok font-semibold">＋</span>
-                    </div>
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#8A4AA6' }}>
-                    Lien
-                  </th>
-                  <th className="w-36 px-2 py-3 text-center">
-                    <div className="flex items-center gap-1 justify-center">
-                      <span className="text-xs text-danger font-semibold">−</span>
-                      <span className="text-xs text-muted font-semibold">/</span>
-                      <span className="text-xs text-ok font-semibold">＋</span>
-                    </div>
-                  </th>
+                  {showFlag && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#2B5FA7' }}>flag</th>
+                  )}
+                  {showFlag && (
+                    <th className="w-36 px-2 py-3 text-center">
+                      <div className="flex items-center gap-1 justify-center">
+                        <span className="text-xs text-danger font-semibold">−</span>
+                        <span className="text-xs text-muted font-semibold">/</span>
+                        <span className="text-xs text-ok font-semibold">＋</span>
+                      </div>
+                    </th>
+                  )}
+                  {showLien && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#8A4AA6' }}>Lien</th>
+                  )}
+                  {showLien && (
+                    <th className="w-36 px-2 py-3 text-center">
+                      <div className="flex items-center gap-1 justify-center">
+                        <span className="text-xs text-danger font-semibold">−</span>
+                        <span className="text-xs text-muted font-semibold">/</span>
+                        <span className="text-xs text-ok font-semibold">＋</span>
+                      </div>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -270,8 +276,8 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                   <tr key={p.id} className="border-b border-border hover:bg-bg transition-colors">
                     <td className="px-4 py-2 font-semibold text-text">{p.name}</td>
                     <td className="px-4 py-2 text-xs text-muted">{p.category}</td>
-                    <StoreCell productId={p.id} productName={p.name} storeId="flag" />
-                    <StoreCell productId={p.id} productName={p.name} storeId="lien" />
+                    {showFlag && <StoreCell productId={p.id} productName={p.name} storeId="flag" />}
+                    {showLien && <StoreCell productId={p.id} productName={p.name} storeId="lien" />}
                   </tr>
                 ))}
               </tbody>

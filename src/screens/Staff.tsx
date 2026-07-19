@@ -53,8 +53,23 @@ const BLANK_FORM = (): FormState => ({
   storeId: 'flag',
 })
 
+function getMonthLabel(offset: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset)
+  return `${d.getFullYear()}年${d.getMonth() + 1}月`
+}
+
+function getMonthPrefix(offset: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 export function StaffScreen() {
   const { products, upsertProduct, stocks, upsertStock, addTransaction, staffPurchases, addStaffPurchase, staffMembers, addStaffMember } = useAppStore()
+
+  const [monthOffset, setMonthOffset] = useState(0)
+  const [selectedStaff, setSelectedStaff] = useState<string>('全員')
 
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(BLANK_FORM())
@@ -63,6 +78,22 @@ export function StaffScreen() {
   const [showRecorderDrop, setShowRecorderDrop] = useState(false)
   const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntry | null>(null)
+
+  const monthPrefix = getMonthPrefix(monthOffset)
+  const monthLabel = getMonthLabel(monthOffset)
+
+  const filteredPurchases = staffPurchases.filter((sp) => {
+    if (!sp.date.startsWith(monthPrefix)) return false
+    if (selectedStaff !== '全員' && sp.purchasedBy !== selectedStaff) return false
+    return true
+  })
+
+  const totalAmountIncTax = filteredPurchases.reduce((sum, sp) => {
+    const incTax = sp.manualProductName
+      ? sp.sellPriceAtPurchase
+      : taxIncluded(sp.sellPriceAtPurchase, sp.taxRate)
+    return sum + incTax * sp.quantity
+  }, 0)
 
   const selectedProduct = form.productId ? products.find((p) => p.id === form.productId) : null
 
@@ -161,21 +192,73 @@ export function StaffScreen() {
         <SideNav />
         <main className="flex-1 flex flex-col overflow-hidden bg-bg">
 
-          {/* ヘッダー */}
-          <div className="px-6 pt-5 pb-4 bg-surface border-b border-border flex items-center gap-3">
-            <div>
-              <p className="text-2xs text-faint">スタッフ購入 合計件数</p>
-              <p className="text-3xl font-bold text-text">{staffPurchases.length} 件</p>
+          {/* フィルターバー */}
+          <div className="px-6 pt-4 pb-3 bg-surface border-b border-border flex flex-col gap-3 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              {/* 月切り替え */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMonthOffset((o) => o - 1)}
+                  className="w-8 h-8 rounded-md border border-border text-muted hover:bg-bg flex items-center justify-center"
+                >‹</button>
+                <span className="text-sm font-bold min-w-[90px] text-center">{monthLabel}</span>
+                <button
+                  onClick={() => setMonthOffset((o) => Math.min(0, o + 1))}
+                  disabled={monthOffset >= 0}
+                  className="w-8 h-8 rounded-md border border-border text-muted hover:bg-bg flex items-center justify-center disabled:opacity-30"
+                >›</button>
+                {monthOffset < 0 && (
+                  <button onClick={() => setMonthOffset(0)} className="text-xs text-accent font-semibold ml-1">
+                    今月に戻る
+                  </button>
+                )}
+              </div>
+              <div className="flex-1" />
+              <Btn variant="primary" size="sm" onClick={openModal}>＋ 購入追加</Btn>
             </div>
-            <div className="flex-1" />
-            <Btn variant="primary" size="sm" onClick={openModal}>＋ 購入追加</Btn>
+
+            {/* スタッフフィルター */}
+            <div className="flex gap-2 overflow-x-auto">
+              <button
+                onClick={() => setSelectedStaff('全員')}
+                className={`flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold transition-colors ${
+                  selectedStaff === '全員' ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'
+                }`}
+              >全員</button>
+              {staffMembers.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => setSelectedStaff(name)}
+                  className={`flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold transition-colors ${
+                    selectedStaff === name ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'
+                  }`}
+                >{name}</button>
+              ))}
+              {staffMembers.length === 0 && (
+                <span className="text-xs text-faint self-center">「設定 → スタッフ管理」でスタッフを登録すると絞り込めます</span>
+              )}
+            </div>
+
+            {/* KPI */}
+            <div className="flex gap-3">
+              <div className="bg-bg rounded-lg px-4 py-2 flex flex-col">
+                <span className="text-2xs text-faint">合計金額（税込）</span>
+                <span className="text-xl font-bold text-accent">¥{totalAmountIncTax.toLocaleString()}</span>
+              </div>
+              <div className="bg-bg rounded-lg px-4 py-2 flex flex-col">
+                <span className="text-2xs text-faint">件数</span>
+                <span className="text-xl font-bold text-text">{filteredPurchases.length} 件</span>
+              </div>
+            </div>
           </div>
 
           {/* 一覧 */}
-          {staffPurchases.length === 0 ? (
+          {filteredPurchases.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 text-muted gap-3">
               <span className="text-5xl">🛍</span>
-              <p className="text-base font-semibold">まだ購入履歴がありません</p>
+              <p className="text-base font-semibold">
+                {staffPurchases.length === 0 ? 'まだ購入履歴がありません' : 'この月・スタッフの購入履歴がありません'}
+              </p>
               <Btn variant="primary" size="sm" onClick={openModal}>＋ 購入追加</Btn>
             </div>
           ) : (
@@ -186,18 +269,17 @@ export function StaffScreen() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">日付</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">仕入価格(税込)</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">数量</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-16">数量</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">購入者</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">記入した人</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-muted w-16">店舗</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {staffPurchases.map((sp) => {
+                  {filteredPurchases.map((sp) => {
                     const p = products.find((pr) => pr.id === sp.productId)
                     const displayName = sp.manualProductName ?? p?.name ?? '不明商品'
                     const displayCategory = sp.manualProductName ? '手動入力' : (p?.category ?? '')
-                    // 手動入力は sellPriceAtPurchase が既に税込、カタログ品は税抜から計算
                     const incTax = sp.manualProductName
                       ? sp.sellPriceAtPurchase
                       : taxIncluded(sp.sellPriceAtPurchase, sp.taxRate)
@@ -227,6 +309,14 @@ export function StaffScreen() {
                     )
                   })}
                 </tbody>
+                <tfoot className="bg-bg border-t-2 border-border sticky bottom-0">
+                  <tr>
+                    <td colSpan={2} className="px-4 py-3 text-sm font-bold text-muted">合計</td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums text-accent">¥{totalAmountIncTax.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums">{filteredPurchases.reduce((s, sp) => s + sp.quantity, 0)}</td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

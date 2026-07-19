@@ -75,6 +75,7 @@ interface AppState {
   addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
   staffMembers: string[]
   addStaffMember: (name: string) => void
+  removeStaffMember: (name: string) => void
   loadFromFirestore: (data: FirestoreData) => void
 }
 
@@ -1042,6 +1043,10 @@ export const useAppStore = create<AppState>()(
           staffMembers: state.staffMembers.includes(name)
             ? state.staffMembers
             : [...state.staffMembers, name],
+        })),
+      removeStaffMember: (name) =>
+        set((state) => ({
+          staffMembers: state.staffMembers.filter((m) => m !== name),
         })),
       loadFromFirestore: (data) =>
         set((state) => ({
