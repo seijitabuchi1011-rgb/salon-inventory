@@ -5,6 +5,7 @@ import { Card } from '../components/Card'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
 
 type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'データ管理'
@@ -381,6 +382,17 @@ export function Settings() {
                     </Row>
                     <Row label="棚卸リマインダー" sub="毎月末5日前">
                       <Toggle value={notifyStocktake} onChange={setNotifyStocktake} />
+                    </Row>
+                  </Card>
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-3">動作確認</p>
+                    <Row label="テスト送信" sub="メール通知が届くか確認できます">
+                      <Btn variant="ghost" size="sm" onClick={() => {
+                        sendNotification('テスト通知', '在庫管理アプリからのテストメールです。\nメール通知が正常に動作しています。')
+                        showToast('テストメールを送信しました')
+                      }}>
+                        送信テスト
+                      </Btn>
                     </Row>
                   </Card>
                   <div className="flex justify-end">

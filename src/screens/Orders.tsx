@@ -4,6 +4,7 @@ import { SideNav } from '../components/SideNav'
 import { StoreDot } from '../components/StoreDot'
 import { Btn } from '../components/Btn'
 import { useAppStore } from '../store'
+import { sendNotification } from '../lib/email'
 
 type Tab = 'receive' | 'dispense'
 
@@ -26,7 +27,7 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, upsertStock, addTransaction, currentStore } = useAppStore()
+  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings } = useAppStore()
   const showFlag = currentStore === 'all' || currentStore === 'flag'
   const showLien = currentStore === 'all' || currentStore === 'lien'
   const [tabState, setTabState] = useState<Tab>('receive')
@@ -49,6 +50,13 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {
       addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
+    }
+    if (delta < 0 && appSettings.notifyLowStock && next <= (s?.minStock ?? 3)) {
+      const p = products.find((pr) => pr.id === productId)
+      sendNotification(
+        '在庫不足アラート',
+        `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）`
+      )
     }
   }
 
@@ -73,6 +81,12 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
       : Math.max(0, modal.currentStock - modal.quantity)
     upsertStock({ productId: modal.productId, storeId: modal.storeId, currentStock: newStock, minStock: modal.minStock, active: modal.active })
     addTransaction({ type: isReceive ? 'receive' : 'dispense', productId: modal.productId, storeId: modal.storeId, quantity: modal.quantity })
+    if (!isReceive && appSettings.notifyLowStock && newStock <= modal.minStock) {
+      sendNotification(
+        '在庫不足アラート',
+        `${modal.productName} の在庫が下限を下回りました。\n店舗: ${modal.storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}\n現在庫: ${newStock} 個（下限: ${modal.minStock} 個）`
+      )
+    }
     setModal(null)
   }
 

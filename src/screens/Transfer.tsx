@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { useAppStore } from '../store'
+import { sendNotification } from '../lib/email'
 import type { StoreId } from '../types'
 
 type Direction = 'flag-to-lien' | 'lien-to-flag'
@@ -11,6 +12,7 @@ export function Transfer() {
     products, stocks, transfers,
     directTransfer, deleteTransfer,
     approveTransfer, rejectTransfer,
+    appSettings,
   } = useAppStore()
 
   const [direction, setDirection] = useState<Direction>('flag-to-lien')
@@ -59,6 +61,12 @@ export function Transfer() {
     if (!selectedId || qty <= 0) return
     directTransfer(fromStore, toStore, selectedId, qty, memo || undefined)
     const name = selectedProduct?.name ?? ''
+    if (appSettings.notifyTransfer) {
+      sendNotification(
+        '店舗間移動',
+        `${name} が移動されました。\n${fromLabel} → ${toLabel}: ${qty} 個${memo ? `\nメモ: ${memo}` : ''}`
+      )
+    }
     setToast(`${name} を ${qty} 個移動しました`)
     setTimeout(() => setToast(''), 2500)
     clearProduct()
