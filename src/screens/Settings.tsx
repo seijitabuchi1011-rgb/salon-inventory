@@ -5,6 +5,7 @@ import { Card } from '../components/Card'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import type { StoreInfo } from '../store'
 
 type Section = '店舗設定' | '在庫アラート' | '通知設定' | 'データ管理'
 const SECTIONS: Section[] = ['店舗設定', '在庫アラート', '通知設定', 'データ管理']
@@ -41,6 +42,14 @@ function Badge({ children, variant }: { children: React.ReactNode; variant: 'dan
   )
 }
 
+function Toast({ msg }: { msg: string }) {
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-text text-white text-sm font-semibold px-5 py-2.5 rounded-full shadow-lg pointer-events-none">
+      {msg}
+    </div>
+  )
+}
+
 function downloadCSV(filename: string, rows: string[][]) {
   const bom = '﻿'
   const csv = bom + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -54,15 +63,49 @@ function downloadCSV(filename: string, rows: string[][]) {
 }
 
 export function Settings() {
-  const { products, stocks, transactions, staffPurchases } = useAppStore()
-  const [section, setSection] = useState<Section>('店舗設定')
+  const {
+    products, stocks, transactions, staffPurchases,
+    storeInfo, setStoreInfo,
+    appSettings, setAppSettings,
+  } = useAppStore()
 
-  const [flagThreshold, setFlagThreshold] = useState(5)
-  const [lienThreshold, setLienThreshold] = useState(3)
-  const [notifyLowStock, setNotifyLowStock] = useState(true)
-  const [notifyOrder, setNotifyOrder] = useState(true)
-  const [notifyTransfer, setNotifyTransfer] = useState(false)
-  const [notifyStocktake, setNotifyStocktake] = useState(true)
+  const [section, setSection] = useState<Section>('店舗設定')
+  const [toast, setToast] = useState('')
+
+  // 店舗設定ローカル状態
+  const [flag, setFlag] = useState<StoreInfo>({ ...storeInfo.flag })
+  const [lien, setLien] = useState<StoreInfo>({ ...storeInfo.lien })
+
+  // 在庫アラートローカル状態
+  const [flagMin, setFlagMin] = useState(appSettings.flagMinStock)
+  const [lienMin, setLienMin] = useState(appSettings.lienMinStock)
+
+  // 通知設定ローカル状態
+  const [notifyLowStock, setNotifyLowStock] = useState(appSettings.notifyLowStock)
+  const [notifyOrder, setNotifyOrder] = useState(appSettings.notifyOrder)
+  const [notifyTransfer, setNotifyTransfer] = useState(appSettings.notifyTransfer)
+  const [notifyStocktake, setNotifyStocktake] = useState(appSettings.notifyStocktake)
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2000)
+  }
+
+  function saveStoreInfo() {
+    setStoreInfo('flag', flag)
+    setStoreInfo('lien', lien)
+    showToast('店舗設定を保存しました')
+  }
+
+  function saveAlertSettings() {
+    setAppSettings({ flagMinStock: flagMin, lienMinStock: lienMin })
+    showToast('在庫アラート設定を保存しました')
+  }
+
+  function saveNotifySettings() {
+    setAppSettings({ notifyLowStock, notifyOrder, notifyTransfer, notifyStocktake })
+    showToast('通知設定を保存しました')
+  }
 
   function exportProducts() {
     const header = ['ID', '商品名', 'カテゴリ', 'メーカー', 'バーコード', '仕入価格(税抜)', '販売価格(税抜)', '税率', 'メモ']
@@ -159,13 +202,25 @@ export function Settings() {
                       <span className="text-sm font-bold text-flag">flag 美容室</span>
                     </div>
                     <Row label="店舗名">
-                      <input defaultValue="flag 美容室" className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text" />
+                      <input
+                        value={flag.name}
+                        onChange={(e) => setFlag({ ...flag, name: e.target.value })}
+                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
+                      />
                     </Row>
                     <Row label="電話番号">
-                      <input defaultValue="03-1234-5678" className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text" />
+                      <input
+                        value={flag.phone}
+                        onChange={(e) => setFlag({ ...flag, phone: e.target.value })}
+                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
+                      />
                     </Row>
                     <Row label="住所">
-                      <input defaultValue="東京都渋谷区..." className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text" />
+                      <input
+                        value={flag.address}
+                        onChange={(e) => setFlag({ ...flag, address: e.target.value })}
+                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
+                      />
                     </Row>
                   </Card>
                   <Card>
@@ -174,17 +229,29 @@ export function Settings() {
                       <span className="text-sm font-bold text-lien">Lien 美容室</span>
                     </div>
                     <Row label="店舗名">
-                      <input defaultValue="Lien 美容室" className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text" />
+                      <input
+                        value={lien.name}
+                        onChange={(e) => setLien({ ...lien, name: e.target.value })}
+                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
+                      />
                     </Row>
                     <Row label="電話番号">
-                      <input defaultValue="03-8765-4321" className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text" />
+                      <input
+                        value={lien.phone}
+                        onChange={(e) => setLien({ ...lien, phone: e.target.value })}
+                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
+                      />
                     </Row>
                     <Row label="住所">
-                      <input defaultValue="東京都新宿区..." className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text" />
+                      <input
+                        value={lien.address}
+                        onChange={(e) => setLien({ ...lien, address: e.target.value })}
+                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
+                      />
                     </Row>
                   </Card>
                   <div className="flex justify-end">
-                    <Btn variant="primary">変更を保存</Btn>
+                    <Btn variant="primary" onClick={saveStoreInfo}>変更を保存</Btn>
                   </div>
                 </>
               )}
@@ -205,9 +272,9 @@ export function Settings() {
                           <span className="text-sm font-bold text-flag">flag 美容室</span>
                         </div>
                         <div className="flex items-center h-10 border border-border-strong rounded-md overflow-hidden">
-                          <button onClick={() => setFlagThreshold(Math.max(0, flagThreshold - 1))} className="w-9 flex items-center justify-center text-muted hover:bg-bg">−</button>
-                          <span className="flex-1 text-center font-bold tabular-nums">{flagThreshold}</span>
-                          <button onClick={() => setFlagThreshold(flagThreshold + 1)} className="w-9 flex items-center justify-center text-muted hover:bg-bg">＋</button>
+                          <button onClick={() => setFlagMin(Math.max(0, flagMin - 1))} className="w-9 flex items-center justify-center text-muted hover:bg-bg">−</button>
+                          <span className="flex-1 text-center font-bold tabular-nums">{flagMin}</span>
+                          <button onClick={() => setFlagMin(flagMin + 1)} className="w-9 flex items-center justify-center text-muted hover:bg-bg">＋</button>
                         </div>
                       </div>
                       <div>
@@ -216,9 +283,9 @@ export function Settings() {
                           <span className="text-sm font-bold text-lien">Lien 美容室</span>
                         </div>
                         <div className="flex items-center h-10 border border-border-strong rounded-md overflow-hidden">
-                          <button onClick={() => setLienThreshold(Math.max(0, lienThreshold - 1))} className="w-9 flex items-center justify-center text-muted hover:bg-bg">−</button>
-                          <span className="flex-1 text-center font-bold tabular-nums">{lienThreshold}</span>
-                          <button onClick={() => setLienThreshold(lienThreshold + 1)} className="w-9 flex items-center justify-center text-muted hover:bg-bg">＋</button>
+                          <button onClick={() => setLienMin(Math.max(0, lienMin - 1))} className="w-9 flex items-center justify-center text-muted hover:bg-bg">−</button>
+                          <span className="flex-1 text-center font-bold tabular-nums">{lienMin}</span>
+                          <button onClick={() => setLienMin(lienMin + 1)} className="w-9 flex items-center justify-center text-muted hover:bg-bg">＋</button>
                         </div>
                       </div>
                     </div>
@@ -233,7 +300,7 @@ export function Settings() {
                     </Row>
                   </Card>
                   <div className="flex justify-end">
-                    <Btn variant="primary">変更を保存</Btn>
+                    <Btn variant="primary" onClick={saveAlertSettings}>変更を保存</Btn>
                   </div>
                 </>
               )}
@@ -257,7 +324,7 @@ export function Settings() {
                     </Row>
                   </Card>
                   <div className="flex justify-end">
-                    <Btn variant="primary">変更を保存</Btn>
+                    <Btn variant="primary" onClick={saveNotifySettings}>変更を保存</Btn>
                   </div>
                 </>
               )}
@@ -300,6 +367,8 @@ export function Settings() {
           </div>
         </main>
       </div>
+
+      {toast && <Toast msg={toast} />}
     </div>
   )
 }

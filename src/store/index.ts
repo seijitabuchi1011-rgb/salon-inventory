@@ -2,9 +2,42 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { StoreFilter, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase } from '../types'
 
+export interface StoreInfo {
+  name: string
+  phone: string
+  address: string
+}
+
+export interface AppSettings {
+  flagMinStock: number
+  lienMinStock: number
+  notifyLowStock: boolean
+  notifyOrder: boolean
+  notifyTransfer: boolean
+  notifyStocktake: boolean
+}
+
+const DEFAULT_STORE_INFO: { flag: StoreInfo; lien: StoreInfo } = {
+  flag: { name: 'flag 美容室', phone: '03-1234-5678', address: '東京都渋谷区...' },
+  lien: { name: 'Lien 美容室', phone: '03-8765-4321', address: '東京都新宿区...' },
+}
+
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  flagMinStock: 5,
+  lienMinStock: 3,
+  notifyLowStock: true,
+  notifyOrder: true,
+  notifyTransfer: false,
+  notifyStocktake: true,
+}
+
 interface AppState {
   currentStore: StoreFilter
   setCurrentStore: (store: StoreFilter) => void
+  storeInfo: { flag: StoreInfo; lien: StoreInfo }
+  setStoreInfo: (storeId: 'flag' | 'lien', info: StoreInfo) => void
+  appSettings: AppSettings
+  setAppSettings: (s: Partial<AppSettings>) => void
   products: Product[]
   stocks: StoreStock[]
   upsertProduct: (product: Product) => void
@@ -819,6 +852,12 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       currentStore: 'all',
       setCurrentStore: (store) => set({ currentStore: store }),
+      storeInfo: DEFAULT_STORE_INFO,
+      setStoreInfo: (storeId, info) =>
+        set((state) => ({ storeInfo: { ...state.storeInfo, [storeId]: info } })),
+      appSettings: DEFAULT_APP_SETTINGS,
+      setAppSettings: (s) =>
+        set((state) => ({ appSettings: { ...state.appSettings, ...s } })),
       products: initialProducts,
       stocks: initialStocks,
       upsertProduct: (product) =>
@@ -955,7 +994,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'salon-inventory-store',
-      version: 5,
+      version: 6,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
@@ -963,6 +1002,8 @@ export const useAppStore = create<AppState>()(
         transfers: state.transfers,
         staffPurchases: state.staffPurchases,
         staffMembers: state.staffMembers,
+        storeInfo: state.storeInfo,
+        appSettings: state.appSettings,
       }),
       migrate: (persistedState, fromVersion) => {
         const saved = persistedState as {
@@ -972,6 +1013,8 @@ export const useAppStore = create<AppState>()(
           transfers?: Transfer[]
           staffPurchases?: StaffPurchase[]
           staffMembers?: string[]
+          storeInfo?: { flag: StoreInfo; lien: StoreInfo }
+          appSettings?: AppSettings
         }
         const products = saved.products ?? []
         const stocks = saved.stocks ?? []
@@ -979,16 +1022,18 @@ export const useAppStore = create<AppState>()(
         const transfers = saved.transfers ?? []
         const staffPurchases = saved.staffPurchases ?? []
         const staffMembers = saved.staffMembers ?? []
+        const storeInfo = saved.storeInfo ?? DEFAULT_STORE_INFO
+        const appSettings = { ...DEFAULT_APP_SETTINGS, ...(saved.appSettings ?? {}) }
 
         if (fromVersion < 3) {
           const newProducts = initialProducts.filter((ip) => !products.some((p) => p.id === ip.id))
           const newStocks = initialStocks.filter(
             (is) => !stocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
           )
-          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks], transactions: [], transfers: [], staffPurchases: [], staffMembers: [] }
+          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks], transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings }
         }
 
-        return { products, stocks, transactions, transfers, staffPurchases, staffMembers }
+        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings }
       },
     }
   )
