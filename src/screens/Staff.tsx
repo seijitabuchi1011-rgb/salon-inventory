@@ -47,7 +47,7 @@ const BLANK_FORM = (): FormState => ({
 })
 
 export function StaffScreen() {
-  const { products, upsertProduct, staffPurchases, addStaffPurchase, staffMembers, addStaffMember } = useAppStore()
+  const { products, upsertProduct, stocks, upsertStock, addTransaction, staffPurchases, addStaffPurchase, staffMembers, addStaffMember } = useAppStore()
 
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(BLANK_FORM())
@@ -101,6 +101,7 @@ export function StaffScreen() {
     if (!form.productId || !selectedProduct || !form.purchasedBy || !form.recordedBy) return
     if (form.purchasedBy && !staffMembers.includes(form.purchasedBy)) addStaffMember(form.purchasedBy)
     if (form.recordedBy && !staffMembers.includes(form.recordedBy)) addStaffMember(form.recordedBy)
+    const ts = new Date(form.date).getTime()
     addStaffPurchase({
       date: form.date,
       productId: form.productId,
@@ -111,6 +112,11 @@ export function StaffScreen() {
       recordedBy: form.recordedBy,
       storeId: form.storeId,
     })
+    // 払出しとしてトランザクション記録 → 販売実績・払出数に反映
+    addTransaction({ type: 'dispense', productId: form.productId, storeId: form.storeId, quantity: form.quantity, timestamp: ts })
+    // 在庫を減算
+    const s = stocks.find((st) => st.productId === form.productId && st.storeId === form.storeId)
+    upsertStock({ productId: form.productId, storeId: form.storeId, currentStock: Math.max(0, (s?.currentStock ?? 0) - form.quantity), minStock: s?.minStock ?? 3, active: s?.active ?? true })
     closeModal()
   }
 
