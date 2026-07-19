@@ -6,6 +6,7 @@ import { Btn } from '../components/Btn'
 import { Card } from '../components/Card'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import type { StoreId, StocktakeSnapshot, Product, StoreStock } from '../types'
 
 type StoreTab = 'flag' | 'lien'
 type ItemStatus = '未確認' | '確認済' | '差異'
@@ -23,8 +24,170 @@ const CATEGORIES = [
   'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
 ]
 
+type ScreenTab = '棚卸実施' | '月次記録'
+
+// ────────────────────────────────────────────
+// 月次記録タブ
+// ────────────────────────────────────────────
+function HistoryTab({
+  snapshots,
+  products,
+  stocks,
+  onDelete,
+}: {
+  snapshots: StocktakeSnapshot[]
+  products: Product[]
+  stocks: StoreStock[]
+  onDelete: (id: string) => void
+}) {
+  // 現在の在庫評価額（理論値）
+  const calcTotal = (storeId: StoreId) =>
+    products.reduce((sum, p) => {
+      const s = stocks.find((st) => st.productId === p.id && st.storeId === storeId)
+      return s?.active !== false ? sum + (s?.currentStock ?? 0) * (p.purchasePrice ?? 0) : sum
+    }, 0)
+  const currentFlag = calcTotal('flag')
+  const currentLien = calcTotal('lien')
+
+  // 月ごとにグループ化（新しい順）
+  const months = [...new Set(snapshots.map((s) => s.month))].sort().reverse()
+
+  function fmtMonth(ym: string) {
+    const [y, m] = ym.split('-')
+    return `${y}年${parseInt(m)}月`
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-6">
+      {/* 現在の在庫評価額 */}
+      <div>
+        <p className="text-xs font-semibold text-muted mb-3">現在の在庫評価額（理論値）</p>
+        <div className="grid grid-cols-3 gap-3">
+          <Card className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <StoreDot store="flag" />
+              <span className="text-xs font-semibold text-muted">flag</span>
+            </div>
+            <span className="text-xl font-bold text-text tabular-nums">¥{currentFlag.toLocaleString()}</span>
+          </Card>
+          <Card className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <StoreDot store="lien" />
+              <span className="text-xs font-semibold text-muted">Lien</span>
+            </div>
+            <span className="text-xl font-bold text-text tabular-nums">¥{currentLien.toLocaleString()}</span>
+          </Card>
+          <Card className="flex flex-col gap-1 border-accent">
+            <span className="text-xs font-semibold text-accent mb-0.5">合計</span>
+            <span className="text-xl font-bold text-text tabular-nums">¥{(currentFlag + currentLien).toLocaleString()}</span>
+          </Card>
+        </div>
+      </div>
+
+      {/* 月次記録 */}
+      <div>
+        <p className="text-xs font-semibold text-muted mb-3">月次記録</p>
+        {months.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-faint gap-2">
+            <span className="text-4xl">📋</span>
+            <p className="text-sm font-semibold">記録がまだありません</p>
+            <p className="text-xs">「棚卸実施」タブで棚卸を完了すると自動で保存されます</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {months.map((month, idx) => {
+              const flagSnap = snapshots.find((s) => s.month === month && s.storeId === 'flag')
+              const lienSnap = snapshots.find((s) => s.month === month && s.storeId === 'lien')
+              const total = (flagSnap?.total ?? 0) + (lienSnap?.total ?? 0)
+
+              // 前月比（次の月のデータと比較）
+              let prevTotal: number | null = null
+              if (idx < months.length - 1) {
+                const prevMonth = months[idx + 1]
+                const pFlag = snapshots.find((s) => s.month === prevMonth && s.storeId === 'flag')
+                const pLien = snapshots.find((s) => s.month === prevMonth && s.storeId === 'lien')
+                prevTotal = (pFlag?.total ?? 0) + (pLien?.total ?? 0)
+              }
+              const diff = prevTotal !== null ? total - prevTotal : null
+
+              return (
+                <Card key={month} className="flex flex-col gap-0 p-0 overflow-hidden">
+                  {/* 月ヘッダー */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-bg border-b border-border">
+                    <p className="text-sm font-bold text-text">{fmtMonth(month)}</p>
+                    {diff !== null && (
+                      <span className={`text-xs font-semibold tabular-nums ${diff > 0 ? 'text-ok' : diff < 0 ? 'text-danger' : 'text-muted'}`}>
+                        前月比 {diff > 0 ? '+' : ''}{diff.toLocaleString()}円
+                      </span>
+                    )}
+                  </div>
+
+                  {/* flag 行 */}
+                  {flagSnap ? (
+                    <div className="flex items-center px-4 py-3 border-b border-border gap-3">
+                      <StoreDot store="flag" />
+                      <span className="text-sm text-text w-20">flag</span>
+                      <span className="flex-1 text-base font-bold text-text tabular-nums">¥{flagSnap.total.toLocaleString()}</span>
+                      <span className="text-xs text-faint">{flagSnap.confirmedCount}/{flagSnap.totalItems}確認</span>
+                      {flagSnap.diffCount > 0 && (
+                        <span className="text-xs text-danger font-semibold">差異{flagSnap.diffCount}件</span>
+                      )}
+                      <span className="text-xs text-faint">{flagSnap.date}</span>
+                      <button
+                        onClick={() => { if (confirm(`${fmtMonth(month)} flag の記録を削除しますか？`)) onDelete(flagSnap.id) }}
+                        className="text-xs text-faint hover:text-danger ml-1"
+                      >✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center px-4 py-3 border-b border-border gap-3">
+                      <StoreDot store="flag" />
+                      <span className="text-sm text-faint w-20">flag</span>
+                      <span className="text-sm text-faint">未実施</span>
+                    </div>
+                  )}
+
+                  {/* Lien 行 */}
+                  {lienSnap ? (
+                    <div className="flex items-center px-4 py-3 border-b border-border gap-3">
+                      <StoreDot store="lien" />
+                      <span className="text-sm text-text w-20">Lien</span>
+                      <span className="flex-1 text-base font-bold text-text tabular-nums">¥{lienSnap.total.toLocaleString()}</span>
+                      <span className="text-xs text-faint">{lienSnap.confirmedCount}/{lienSnap.totalItems}確認</span>
+                      {lienSnap.diffCount > 0 && (
+                        <span className="text-xs text-danger font-semibold">差異{lienSnap.diffCount}件</span>
+                      )}
+                      <span className="text-xs text-faint">{lienSnap.date}</span>
+                      <button
+                        onClick={() => { if (confirm(`${fmtMonth(month)} Lien の記録を削除しますか？`)) onDelete(lienSnap.id) }}
+                        className="text-xs text-faint hover:text-danger ml-1"
+                      >✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center px-4 py-3 border-b border-border gap-3">
+                      <StoreDot store="lien" />
+                      <span className="text-sm text-faint w-20">Lien</span>
+                      <span className="text-sm text-faint">未実施</span>
+                    </div>
+                  )}
+
+                  {/* 合計行 */}
+                  <div className="flex items-center px-4 py-3 gap-3 bg-bg">
+                    <span className="text-xs font-semibold text-muted w-20 ml-5">合計</span>
+                    <span className="flex-1 text-base font-bold text-accent tabular-nums">¥{total.toLocaleString()}</span>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function Stocktake() {
-  const { products, stocks, upsertStock } = useAppStore()
+  const { products, stocks, upsertStock, stocktakeSnapshots, addStocktakeSnapshot, deleteStocktakeSnapshot } = useAppStore()
+  const [screenTab, setScreenTab] = useState<ScreenTab>('棚卸実施')
   const [store, setStore] = useState<StoreTab>('flag')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('すべて')
   const [category, setCategory] = useState('すべて')
@@ -112,6 +275,17 @@ export function Stocktake() {
         active: s?.active ?? true,
       })
     })
+    // 月次スナップショットを保存
+    const today = new Date()
+    addStocktakeSnapshot({
+      month: today.toISOString().slice(0, 7),
+      date: today.toISOString().slice(0, 10),
+      storeId: store as StoreId,
+      total: totalValue,
+      confirmedCount: confirmed,
+      diffCount: diffCount,
+      totalItems: items.length,
+    })
     setActualCounts((prev) => ({ ...prev, [store]: {} }))
     setShowCompleteModal(false)
     setStatusFilter('すべて')
@@ -141,10 +315,25 @@ export function Stocktake() {
     <div className="flex flex-col h-full">
       <div className="h-status bg-surface border-b border-border" />
       <AppBar title="棚卸" showStoreSwitch={false} />
+      {/* 画面タブ */}
+      <div className="bg-surface border-b border-border flex">
+        {(['棚卸実施', '月次記録'] as ScreenTab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setScreenTab(t)}
+            className={`flex-1 py-2.5 text-sm font-bold transition-colors border-b-2 ${
+              screenTab === t ? 'border-accent text-accent' : 'border-transparent text-muted'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
         <main className="flex-1 flex flex-col overflow-hidden bg-bg">
 
+          {screenTab === '棚卸実施' && (<>
           {/* ヘッダー */}
           <div className="px-6 pt-5 pb-4 bg-surface border-b border-border">
             {/* 店舗タブ＋ボタン行 */}
@@ -308,6 +497,16 @@ export function Stocktake() {
               </table>
             )}
           </div>
+          </>)}
+
+          {screenTab === '月次記録' && (
+            <HistoryTab
+              snapshots={stocktakeSnapshots}
+              products={products}
+              stocks={stocks}
+              onDelete={deleteStocktakeSnapshot}
+            />
+          )}
         </main>
       </div>
 

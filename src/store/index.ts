@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase } from '../types'
+import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot } from '../types'
 
 export interface StoreInfo {
   name: string
@@ -45,6 +45,7 @@ export interface FirestoreData {
   staffMembers: string[]
   storeInfo: { flag: StoreInfo; lien: StoreInfo }
   appSettings: AppSettings
+  stocktakeSnapshots: StocktakeSnapshot[]
 }
 
 interface AppState {
@@ -80,6 +81,9 @@ interface AppState {
   staffMembers: string[]
   addStaffMember: (name: string) => void
   removeStaffMember: (name: string) => void
+  stocktakeSnapshots: StocktakeSnapshot[]
+  addStocktakeSnapshot: (s: Omit<StocktakeSnapshot, 'id'>) => void
+  deleteStocktakeSnapshot: (id: string) => void
   loadFromFirestore: (data: FirestoreData) => void
 }
 
@@ -1052,6 +1056,18 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           staffMembers: state.staffMembers.filter((m) => m !== name),
         })),
+      stocktakeSnapshots: [],
+      addStocktakeSnapshot: (s) =>
+        set((state) => ({
+          stocktakeSnapshots: [
+            { ...s, id: `SS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` },
+            ...state.stocktakeSnapshots,
+          ],
+        })),
+      deleteStocktakeSnapshot: (id) =>
+        set((state) => ({
+          stocktakeSnapshots: state.stocktakeSnapshots.filter((s) => s.id !== id),
+        })),
       loadFromFirestore: (data) =>
         set((state) => ({
           products: data.products.map((fp) => ({
@@ -1066,11 +1082,12 @@ export const useAppStore = create<AppState>()(
           staffMembers: data.staffMembers ?? state.staffMembers,
           storeInfo: data.storeInfo ?? state.storeInfo,
           appSettings: data.appSettings ?? state.appSettings,
+          stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
         })),
     }),
     {
       name: 'salon-inventory-store',
-      version: 6,
+      version: 7,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
@@ -1080,6 +1097,7 @@ export const useAppStore = create<AppState>()(
         staffMembers: state.staffMembers,
         storeInfo: state.storeInfo,
         appSettings: state.appSettings,
+        stocktakeSnapshots: state.stocktakeSnapshots,
       }),
       migrate: (persistedState, fromVersion) => {
         const saved = persistedState as {
@@ -1091,6 +1109,7 @@ export const useAppStore = create<AppState>()(
           staffMembers?: string[]
           storeInfo?: { flag: StoreInfo; lien: StoreInfo }
           appSettings?: AppSettings
+          stocktakeSnapshots?: StocktakeSnapshot[]
         }
         const products = saved.products ?? []
         const stocks = saved.stocks ?? []
@@ -1100,14 +1119,15 @@ export const useAppStore = create<AppState>()(
         const staffMembers = saved.staffMembers ?? []
         const storeInfo = saved.storeInfo ?? DEFAULT_STORE_INFO
         const appSettings = { ...DEFAULT_APP_SETTINGS, ...(saved.appSettings ?? {}) }
+        const stocktakeSnapshots = saved.stocktakeSnapshots ?? []
 
         // fromVersion < 3: 初回インストール (ユーザーデータが存在しない場合のみ初期データを投入)
         // ユーザーがすでにデータを設定している場合は絶対に上書きしない
         if (fromVersion < 3 && products.length === 0) {
-          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings }
+          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings, stocktakeSnapshots: [] }
         }
 
-        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings }
+        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings, stocktakeSnapshots }
       },
     }
   )

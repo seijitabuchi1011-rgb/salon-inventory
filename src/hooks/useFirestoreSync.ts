@@ -6,6 +6,7 @@ export function useFirestoreSync() {
   const {
     products, stocks, transactions, transfers,
     staffPurchases, staffMembers, storeInfo, appSettings,
+    stocktakeSnapshots,
     loadFromFirestore,
   } = useAppStore()
 
@@ -44,6 +45,7 @@ export function useFirestoreSync() {
       writeToFirestore({
         products, stocks, transactions, transfers,
         staffPurchases, staffMembers, storeInfo, appSettings,
+        stocktakeSnapshots,
       }).catch((e) => console.error('[Firestore write]', e))
     }, 1500)
 
@@ -52,5 +54,6 @@ export function useFirestoreSync() {
     firestoreConfirmed,
     products, stocks, transactions, transfers,
     staffPurchases, staffMembers, storeInfo, appSettings,
+    stocktakeSnapshots,
   ])
 }

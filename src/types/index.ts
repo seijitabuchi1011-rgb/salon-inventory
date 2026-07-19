@@ -88,6 +88,17 @@ export interface StocktakeItem {
   status: '未確認' | '確認済' | '差異'
 }
 
+export interface StocktakeSnapshot {
+  id: string
+  month: string       // YYYY-MM
+  date: string        // YYYY-MM-DD
+  storeId: StoreId
+  total: number       // 在庫合計金額 (実棚数 × 仕入単価)
+  confirmedCount: number
+  diffCount: number
+  totalItems: number
+}
+
 export interface Stocktake {
   id: string
   storeId: StoreId
