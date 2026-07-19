@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
@@ -67,6 +67,8 @@ export function ProductEdit() {
   const [lienActive, setLienActive] = useState(existingLienStock?.active ?? true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
   const [taxRate, setTaxRate] = useState<8 | 10>(existing?.taxRate ?? 10)
+  const [image, setImage] = useState(existing?.image ?? '')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // useState の初期値は初回レンダリング時のみ評価されるため、
   // zustand の localStorage 復元後に確実に同期する
@@ -80,6 +82,7 @@ export function ProductEdit() {
     setSellPrice(existing.sellPrice?.toString() ?? '')
     setMemo(existing.memo ?? '')
     setTaxRate(existing.taxRate ?? 10)
+    setImage(existing.image ?? '')
 
     const fStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'flag')
     const lStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'lien')
@@ -88,6 +91,29 @@ export function ProductEdit() {
   }, [existing?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = existing ? '商品登録・編集' : '商品登録・編集'
+
+  function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const MAX = 300
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        setImage(canvas.toDataURL('image/jpeg', 0.65))
+      }
+      img.src = ev.target?.result as string
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
 
   const handleSave = () => {
     const productId = existing?.id ?? String(Date.now())
@@ -100,6 +126,7 @@ export function ProductEdit() {
       purchasePrice: Number(purchasePrice) || 0,
       sellPrice: Number(sellPrice) || 0,
       taxRate,
+      image: image || undefined,
       memo,
     })
     upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
@@ -131,12 +158,35 @@ export function ProductEdit() {
               {/* 商品画像 */}
               <div className="bg-surface border border-border rounded-lg p-5">
                 <Field label="商品画像">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageFile}
+                  />
                   <div
-                    className="h-48 rounded-md border border-dashed border-border-strong flex items-center justify-center text-sm text-muted"
-                    style={{ background: 'repeating-linear-gradient(45deg, #F1F1EE 0 8px, #E8E8E4 8px 16px)' }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-48 rounded-md border border-dashed border-border-strong flex flex-col items-center justify-center gap-2 cursor-pointer active:opacity-70 overflow-hidden"
+                    style={image ? {} : { background: 'repeating-linear-gradient(45deg, #F1F1EE 0 8px, #E8E8E4 8px 16px)' }}
                   >
-                    タップして画像を追加
+                    {image ? (
+                      <img src={image} alt="商品画像" className="w-full h-full object-cover" />
+                    ) : (
+                      <>
+                        <span className="text-2xl text-muted">＋</span>
+                        <span className="text-sm text-muted">タップして画像を追加</span>
+                      </>
+                    )}
                   </div>
+                  {image && (
+                    <button
+                      onClick={() => setImage('')}
+                      className="mt-2 text-xs text-danger underline"
+                    >
+                      画像を削除
+                    </button>
+                  )}
                 </Field>
               </div>
 

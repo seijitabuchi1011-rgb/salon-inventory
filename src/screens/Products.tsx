@@ -130,10 +130,14 @@ function SortableRow({
         </button>
       </td>
       <td className="px-3 py-3 cursor-pointer" onClick={onNavigate}>
-        <div
-          className="w-10 h-10 rounded flex-shrink-0"
-          style={{ background: 'repeating-linear-gradient(45deg, #F1F1EE 0 4px, #E8E8E4 4px 8px)' }}
-        />
+        {p.image ? (
+          <img src={p.image} alt={p.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+        ) : (
+          <div
+            className="w-10 h-10 rounded flex-shrink-0"
+            style={{ background: 'repeating-linear-gradient(45deg, #F1F1EE 0 4px, #E8E8E4 4px 8px)' }}
+          />
+        )}
       </td>
       <td className="px-4 py-3 cursor-pointer" onClick={onNavigate}>
         <div className="font-semibold text-text truncate max-w-xs">{p.name}</div>
@@ -270,6 +274,8 @@ export function Products() {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                   placeholder="商品名・バーコードで検索"
                   className="w-full h-10 pl-8 pr-4 border border-border rounded-md text-sm bg-surface focus:outline-none focus:border-accent"
                 />
