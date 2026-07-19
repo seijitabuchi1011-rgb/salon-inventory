@@ -7,6 +7,21 @@ import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
 import type { StoreId } from '../types'
 
+const PRODUCT_CATEGORIES = [
+  'カラー剤', 'ブリーチ剤', 'カラーオキシ',
+  'パーマ剤', 'プレックス剤', '髪ドラ',
+  'oggi otto', 'H2', '処理剤', '小物類',
+  'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
+]
+
+type QuickAdd = {
+  name: string
+  category: string
+  purchasePrice: string
+  sellPrice: string
+  taxRate: 8 | 10
+}
+
 function taxIncluded(price: number, rate: 8 | 10) {
   return Math.round(price * (rate === 10 ? 1.1 : 1.08))
 }
@@ -32,13 +47,14 @@ const BLANK_FORM = (): FormState => ({
 })
 
 export function StaffScreen() {
-  const { products, staffPurchases, addStaffPurchase, staffMembers, addStaffMember } = useAppStore()
+  const { products, upsertProduct, staffPurchases, addStaffPurchase, staffMembers, addStaffMember } = useAppStore()
 
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(BLANK_FORM())
   const [showProductDrop, setShowProductDrop] = useState(false)
   const [showBuyerDrop, setShowBuyerDrop] = useState(false)
   const [showRecorderDrop, setShowRecorderDrop] = useState(false)
+  const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
 
   const selectedProduct = form.productId ? products.find((p) => p.id === form.productId) : null
 
@@ -58,9 +74,28 @@ export function StaffScreen() {
     setShowProductDrop(false)
     setShowBuyerDrop(false)
     setShowRecorderDrop(false)
+    setQuickAdd(null)
     setShowModal(true)
   }
-  function closeModal() { setShowModal(false) }
+  function closeModal() { setShowModal(false); setQuickAdd(null) }
+
+  function handleQuickAddSave() {
+    if (!quickAdd || !quickAdd.name || !quickAdd.category) return
+    const id = `QP-${Date.now()}`
+    upsertProduct({
+      id,
+      name: quickAdd.name,
+      category: quickAdd.category,
+      maker: '',
+      barcode: '',
+      purchasePrice: Number(quickAdd.purchasePrice) || 0,
+      sellPrice: Number(quickAdd.sellPrice) || 0,
+      taxRate: quickAdd.taxRate,
+      memo: '',
+    })
+    setForm((f) => ({ ...f, productId: id, productSearch: quickAdd.name }))
+    setQuickAdd(null)
+  }
 
   function handleSubmit() {
     if (!form.productId || !selectedProduct || !form.purchasedBy || !form.recordedBy) return
@@ -201,7 +236,80 @@ export function StaffScreen() {
             {/* 商品選択 */}
             <div className="relative">
               <label className="text-xs font-semibold text-muted mb-1.5 block">商品</label>
-              {selectedProduct ? (
+              {quickAdd ? (
+                /* 新規商品クイック登録フォーム */
+                <div className="border border-ok rounded-lg p-4 bg-ok-soft flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-ok">新規商品を登録</p>
+                    <button onMouseDown={() => setQuickAdd(null)} className="text-xs text-muted hover:text-text">キャンセル</button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div>
+                      <label className="text-2xs text-muted mb-1 block">商品名 *</label>
+                      <input
+                        value={quickAdd.name}
+                        onChange={(e) => setQuickAdd((q) => q && { ...q, name: e.target.value })}
+                        className="w-full h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-2xs text-muted mb-1 block">カテゴリ *</label>
+                      <select
+                        value={quickAdd.category}
+                        onChange={(e) => setQuickAdd((q) => q && { ...q, category: e.target.value })}
+                        className="w-full h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok"
+                      >
+                        <option value="">選択してください</option>
+                        {PRODUCT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-2xs text-muted mb-1 block">仕入価格(税抜)</label>
+                        <input
+                          value={quickAdd.purchasePrice}
+                          onChange={(e) => setQuickAdd((q) => q && { ...q, purchasePrice: e.target.value })}
+                          placeholder="0"
+                          className="w-full h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-2xs text-muted mb-1 block">販売価格(税抜)</label>
+                        <input
+                          value={quickAdd.sellPrice}
+                          onChange={(e) => setQuickAdd((q) => q && { ...q, sellPrice: e.target.value })}
+                          placeholder="0"
+                          className="w-full h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-2xs text-muted mb-1 block">税率</label>
+                      <div className="flex gap-2">
+                        {([10, 8] as const).map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onMouseDown={() => setQuickAdd((q) => q && { ...q, taxRate: r })}
+                            className={`flex-1 h-8 rounded-md text-xs font-bold border-2 transition-colors ${
+                              quickAdd.taxRate === r ? 'bg-ok text-white border-ok' : 'bg-surface text-muted border-border'
+                            }`}
+                          >
+                            {r}% {r === 10 ? '標準' : '軽減'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <Btn
+                    variant="primary"
+                    onClick={handleQuickAddSave}
+                    disabled={!quickAdd.name || !quickAdd.category}
+                  >
+                    ✓ 登録してこの商品を選択
+                  </Btn>
+                </div>
+              ) : selectedProduct ? (
                 <div className="border border-accent rounded-md p-3 bg-accent-soft flex items-center gap-3">
                   <div className="flex-1">
                     <p className="text-sm font-bold text-text">{selectedProduct.name}</p>
@@ -241,6 +349,18 @@ export function StaffScreen() {
                           </span>
                         </button>
                       ))}
+                      {form.productSearch.length > 0 && (
+                        <button
+                          onMouseDown={() => {
+                            setQuickAdd({ name: form.productSearch, category: '', purchasePrice: '', sellPrice: '', taxRate: 10 })
+                            setShowProductDrop(false)
+                          }}
+                          className="w-full text-left px-3 py-2.5 text-sm text-ok font-semibold hover:bg-ok-soft flex items-center gap-2 border-t border-border"
+                        >
+                          <span>＋</span>
+                          <span>「{form.productSearch}」を新規商品として登録</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </>

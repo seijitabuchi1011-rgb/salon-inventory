@@ -22,7 +22,8 @@ export default function App() {
         <Route path="/products/new" element={<ProductEdit />} />
         <Route path="/products/:id" element={<ProductEdit />} />
         <Route path="/low-stock" element={<LowStock />} />
-        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders" element={<Orders fixedMode="receive" />} />
+        <Route path="/dispense" element={<Orders fixedMode="dispense" />} />
         <Route path="/stocktake" element={<Stocktake />} />
         <Route path="/transfer" element={<Transfer />} />
         <Route path="/sales" element={<Sales />} />

@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { path: '/products', icon: '☰', label: '商品一覧' },
   { path: '/low-stock', icon: '⚠', label: '在庫不足' },
   { path: '/orders', icon: '↧', label: '仕入れ' },
+  { path: '/dispense', icon: '↓', label: '払出し' },
   { path: '/monthly-purchases', icon: '¥', label: '今月仕入高' },
   { path: '/stocktake', icon: '⊟', label: '棚卸' },
   { path: '/transfer', icon: '⇄', label: '店舗間移動' },

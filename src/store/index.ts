@@ -18,7 +18,8 @@ interface AppState {
     lienPatch: Partial<Pick<StoreStock, 'active' | 'minStock'>> | null,
   ) => void
   transactions: Transaction[]
-  addTransaction: (t: Omit<Transaction, 'id' | 'timestamp'>) => void
+  addTransaction: (t: Omit<Transaction, 'id' | 'timestamp'> & { timestamp?: number }) => void
+  deleteTransaction: (id: string) => void
   transfers: Transfer[]
   addTransfer: (t: Omit<Transfer, 'id' | 'createdAt' | 'status'>) => void
   approveTransfer: (id: string) => void
@@ -883,9 +884,13 @@ export const useAppStore = create<AppState>()(
       addTransaction: (t) =>
         set((state) => ({
           transactions: [
-            { ...t, id: `TX-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() },
+            { ...t, id: `TX-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: t.timestamp ?? Date.now() },
             ...state.transactions,
           ],
+        })),
+      deleteTransaction: (id) =>
+        set((state) => ({
+          transactions: state.transactions.filter((t) => t.id !== id),
         })),
       transfers: [],
       addTransfer: (t) =>

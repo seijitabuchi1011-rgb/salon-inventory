@@ -25,9 +25,11 @@ type ModalState = {
   quantity: number
 }
 
-export function Orders() {
+export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   const { products, stocks, upsertStock, addTransaction } = useAppStore()
-  const [tab, setTab] = useState<Tab>('receive')
+  const [tabState, setTabState] = useState<Tab>('receive')
+  const tab = fixedMode ?? tabState
+  const setTab = fixedMode ? () => {} : setTabState
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('すべて')
   const [modal, setModal] = useState<ModalState | null>(null)
@@ -160,7 +162,7 @@ export function Orders() {
   return (
     <div className="flex flex-col h-full">
       <div className="h-status bg-surface border-b border-border" />
-      <AppBar title="仕入れ" />
+      <AppBar title={fixedMode === 'dispense' ? '払出し' : '仕入れ'} />
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
         <main className="flex-1 flex flex-col overflow-hidden bg-bg">
@@ -168,32 +170,41 @@ export function Orders() {
           {/* フィルターヘッダー */}
           <div className="px-6 pt-4 pb-3 bg-surface border-b border-border flex flex-col gap-3">
 
-            {/* タブ */}
-            <div className="flex gap-3 items-center">
-              <div className="flex rounded-lg border border-border overflow-hidden">
-                <button
-                  onClick={() => setTab('receive')}
-                  className={`px-5 py-2 text-sm font-bold transition-colors flex items-center gap-1.5 ${
-                    tab === 'receive' ? 'bg-ok text-white' : 'bg-surface text-muted'
-                  }`}
-                >
-                  ↑ 仕入数
-                </button>
-                <button
-                  onClick={() => setTab('dispense')}
-                  className={`px-5 py-2 text-sm font-bold border-l border-border transition-colors flex items-center gap-1.5 ${
-                    tab === 'dispense' ? 'bg-danger text-white' : 'bg-surface text-muted'
-                  }`}
-                >
-                  ↓ 払出数
-                </button>
+            {/* タブ（fixedMode時は非表示） */}
+            {!fixedMode && (
+              <div className="flex gap-3 items-center">
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  <button
+                    onClick={() => setTab('receive')}
+                    className={`px-5 py-2 text-sm font-bold transition-colors flex items-center gap-1.5 ${
+                      tab === 'receive' ? 'bg-ok text-white' : 'bg-surface text-muted'
+                    }`}
+                  >
+                    ↑ 仕入数
+                  </button>
+                  <button
+                    onClick={() => setTab('dispense')}
+                    className={`px-5 py-2 text-sm font-bold border-l border-border transition-colors flex items-center gap-1.5 ${
+                      tab === 'dispense' ? 'bg-danger text-white' : 'bg-surface text-muted'
+                    }`}
+                  >
+                    ↓ 払出数
+                  </button>
+                </div>
+                <p className="text-xs text-muted">
+                  {isReceive
+                    ? '緑の ＋ をタップで即カウントアップ。数字をタップで任意入力'
+                    : '赤の − をタップで即カウントダウン。数字をタップで任意入力'}
+                </p>
               </div>
+            )}
+            {fixedMode && (
               <p className="text-xs text-muted">
                 {isReceive
                   ? '緑の ＋ をタップで即カウントアップ。数字をタップで任意入力'
                   : '赤の − をタップで即カウントダウン。数字をタップで任意入力'}
               </p>
-            </div>
+            )}
 
             {/* 検索 */}
             <div className="relative">
