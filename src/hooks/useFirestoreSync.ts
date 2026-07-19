@@ -9,40 +9,37 @@ export function useFirestoreSync() {
     loadFromFirestore,
   } = useAppStore()
 
-  // true になったら Firestore への書き込みを開始する
-  const [syncReady, setSyncReady] = useState(false)
-  // Firestore からデータを受け取った直後は一定時間書き戻しを抑制する
+  // Firestore の状態を確認してから書き込みを許可する
+  // タイムアウトでは書き込みを許可しない（実データを上書きするリスクを防ぐ）
+  const [firestoreConfirmed, setFirestoreConfirmed] = useState(false)
   const writeBlockedUntil = useRef(0)
 
   useEffect(() => {
     const unsubscribe = subscribeToFirestore({
       onData: (data) => {
-        // 他のデバイスからの更新 — ローカルに反映
+        // 他デバイスからの更新 — ローカルに反映してから書き込みブロック
         writeBlockedUntil.current = Date.now() + 3000
         loadFromFirestore(data)
-        setSyncReady(true)
+        setFirestoreConfirmed(true)
       },
       onEmpty: () => {
-        // Firestore がまだ空 (初回デバイス) — ローカルデータを書き込む
-        setSyncReady(true)
+        // Firestore が空 (初回) — ローカルデータで初期化してよい
+        setFirestoreConfirmed(true)
+      },
+      onError: () => {
+        // エラー時は書き込みしない（実データ保護）
+        // firestoreConfirmed を true にしない
       },
     })
 
-    // 5 秒以内に応答がない場合もオフラインとして syncReady にする
-    const timeout = setTimeout(() => setSyncReady(true), 5000)
-
-    return () => {
-      unsubscribe()
-      clearTimeout(timeout)
-    }
+    return () => unsubscribe()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ローカル状態が変化したら Firestore に書き込む (1.5 秒デバウンス)
+  // Firestore 確認後のみ書き込む (1.5 秒デバウンス)
   useEffect(() => {
-    if (!syncReady) return
+    if (!firestoreConfirmed) return
 
     const timer = setTimeout(() => {
-      // Firestore から受け取った直後は書き戻しをスキップ (ループ防止)
       if (Date.now() < writeBlockedUntil.current) return
       writeToFirestore({
         products, stocks, transactions, transfers,
@@ -52,7 +49,7 @@ export function useFirestoreSync() {
 
     return () => clearTimeout(timer)
   }, [
-    syncReady,
+    firestoreConfirmed,
     products, stocks, transactions, transfers,
     staffPurchases, staffMembers, storeInfo, appSettings,
   ])

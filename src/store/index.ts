@@ -1092,12 +1092,10 @@ export const useAppStore = create<AppState>()(
         const storeInfo = saved.storeInfo ?? DEFAULT_STORE_INFO
         const appSettings = { ...DEFAULT_APP_SETTINGS, ...(saved.appSettings ?? {}) }
 
-        if (fromVersion < 3) {
-          const newProducts = initialProducts.filter((ip) => !products.some((p) => p.id === ip.id))
-          const newStocks = initialStocks.filter(
-            (is) => !stocks.some((ss) => ss.productId === is.productId && ss.storeId === is.storeId)
-          )
-          return { products: [...products, ...newProducts], stocks: [...stocks, ...newStocks], transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings }
+        // fromVersion < 3: 初回インストール (ユーザーデータが存在しない場合のみ初期データを投入)
+        // ユーザーがすでにデータを設定している場合は絶対に上書きしない
+        if (fromVersion < 3 && products.length === 0) {
+          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings }
         }
 
         return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings }
