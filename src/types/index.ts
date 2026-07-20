@@ -12,6 +12,8 @@ export interface Product {
   taxRate?: 8 | 10
   image?: string
   memo?: string
+  dealer?: string
+  dealerRep?: string
 }
 
 export interface StaffPurchase {

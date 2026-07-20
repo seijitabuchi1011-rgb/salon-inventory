@@ -50,7 +50,7 @@ export function ProductEdit() {
   const { id } = useParams()
   const location = useLocation()
   const backCategory = (location.state as { category?: string } | null)?.category
-  const { products, stocks, upsertProduct, upsertStock } = useAppStore()
+  const { products, stocks, upsertProduct, upsertStock, categories, makers, dealers, dealerReps } = useAppStore()
 
   const goBack = () => navigate('/products', { state: { category: backCategory } })
   const existing = id && id !== 'new' ? products.find((p) => p.id === id) : undefined
@@ -71,6 +71,8 @@ export function ProductEdit() {
   const [lienActive, setLienActive] = useState(existingLienStock?.active ?? true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
   const [taxRate, setTaxRate] = useState<8 | 10>(existing?.taxRate ?? 10)
+  const [dealer, setDealer] = useState(existing?.dealer ?? '')
+  const [dealerRep, setDealerRep] = useState(existing?.dealerRep ?? '')
   const [image, setImage] = useState(existing?.image ?? '')
   const [uploading, setUploading] = useState(false)
   const [savedToast, setSavedToast] = useState(false)
@@ -90,6 +92,8 @@ export function ProductEdit() {
     setMemo(existing.memo ?? '')
     setTaxRate(existing.taxRate ?? 10)
     setImage(existing.image ?? '')
+    setDealer(existing.dealer ?? '')
+    setDealerRep(existing.dealerRep ?? '')
 
     const fStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'flag')
     const lStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'lien')
@@ -139,6 +143,8 @@ export function ProductEdit() {
       taxRate,
       image: image || undefined,
       memo,
+      dealer: dealer || undefined,
+      dealerRep: dealerRep || undefined,
     })
     upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
     upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
@@ -287,14 +293,7 @@ export function ProductEdit() {
                     className="h-btn-md border border-border-strong rounded-md px-4 text-sm bg-surface text-text outline-none focus:border-accent"
                   >
                     <option value="">選択してください</option>
-                    {[
-                      'カラー剤', 'ブリーチ剤', 'カラーオキシ',
-                      'パーマ剤', 'プレックス剤', '髪ドラ',
-                      'oggi otto', 'H2', '処理剤', '小物類',
-                      'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
-                    ].map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </Field>
 
@@ -305,17 +304,7 @@ export function ProductEdit() {
                     className="h-btn-md border border-border-strong rounded-md px-4 text-sm bg-surface text-text outline-none focus:border-accent"
                   >
                     <option value="">選択してください</option>
-                    {[
-                      'ナカノ', 'フィヨーレ', 'テクノエイト', 'ルベル', '資生堂',
-                      'シュワルツコフ', 'ウェラ', 'ミルボン', 'アリミノ', 'ロレアル',
-                      'ナプラ', '田村治照堂', 'デミコスメティック', 'タマリス', 'b-ex',
-                      'ナンバースリー', 'ワイマック', 'ホーユー', 'ピュアセラボ', 'パイモア',
-                      'ミアン', 'ハホニコ', 'MADENA', 'アンダー７', 'STRI',
-                      'MTG', 'STELLA', 'アマトラ', 'マーキュリー', 'TIME',
-                      'サンコール', 'GO-ON', 'LOA', '髪ドラ',
-                    ].map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
+                    {makers.map((m) => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </Field>
 
@@ -428,6 +417,29 @@ export function ProductEdit() {
                     </div>
                   </div>
                 </div>
+
+                {/* ディーラー */}
+                <Field label="ディーラー">
+                  <select
+                    value={dealer}
+                    onChange={(e) => setDealer(e.target.value)}
+                    className="h-btn-md border border-border-strong rounded-md px-4 text-sm bg-surface text-text outline-none focus:border-accent"
+                  >
+                    <option value="">選択してください</option>
+                    {dealers.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </Field>
+
+                <Field label="ディーラー担当">
+                  <select
+                    value={dealerRep}
+                    onChange={(e) => setDealerRep(e.target.value)}
+                    className="h-btn-md border border-border-strong rounded-md px-4 text-sm bg-surface text-text outline-none focus:border-accent"
+                  >
+                    <option value="">選択してください</option>
+                    {dealerReps.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </Field>
 
                 {/* メモ */}
                 <div className="col-span-2">

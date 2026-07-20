@@ -25,6 +25,22 @@ const DEFAULT_STORE_INFO: { flag: StoreInfo; lien: StoreInfo } = {
   lien: { name: 'Lien 美容室', phone: '03-8765-4321', address: '東京都新宿区...' },
 }
 
+const DEFAULT_CATEGORIES = [
+  'カラー剤', 'ブリーチ剤', 'カラーオキシ', 'パーマ剤', 'プレックス剤',
+  '髪ドラ', 'oggi otto', 'H2', '処理剤', '小物類',
+  'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
+]
+
+const DEFAULT_MAKERS = [
+  'ナカノ', 'フィヨーレ', 'テクノエイト', 'ルベル', '資生堂',
+  'シュワルツコフ', 'ウェラ', 'ミルボン', 'アリミノ', 'ロレアル',
+  'ナプラ', '田村治照堂', 'デミコスメティック', 'タマリス', 'b-ex',
+  'ナンバースリー', 'ワイマック', 'ホーユー', 'ピュアセラボ', 'パイモア',
+  'ミアン', 'ハホニコ', 'MADENA', 'アンダー７', 'STRI',
+  'MTG', 'STELLA', 'アマトラ', 'マーキュリー', 'TIME',
+  'サンコール', 'GO-ON', 'LOA', '髪ドラ',
+]
+
 const DEFAULT_APP_SETTINGS: AppSettings = {
   flagMinStock: 5,
   lienMinStock: 3,
@@ -48,6 +64,10 @@ export interface FirestoreData {
   storeInfo: { flag: StoreInfo; lien: StoreInfo }
   appSettings: AppSettings
   stocktakeSnapshots: StocktakeSnapshot[]
+  categories: string[]
+  makers: string[]
+  dealers: string[]
+  dealerReps: string[]
 }
 
 interface AppState {
@@ -86,6 +106,18 @@ interface AppState {
   stocktakeSnapshots: StocktakeSnapshot[]
   addStocktakeSnapshot: (s: Omit<StocktakeSnapshot, 'id'>) => void
   deleteStocktakeSnapshot: (id: string) => void
+  categories: string[]
+  addCategory: (name: string) => void
+  removeCategory: (name: string) => void
+  makers: string[]
+  addMaker: (name: string) => void
+  removeMaker: (name: string) => void
+  dealers: string[]
+  addDealer: (name: string) => void
+  removeDealer: (name: string) => void
+  dealerReps: string[]
+  addDealerRep: (name: string) => void
+  removeDealerRep: (name: string) => void
   setProductImages: (images: Record<string, string>) => void
   loadFromFirestore: (data: FirestoreData) => void
 }
@@ -1071,6 +1103,34 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           stocktakeSnapshots: state.stocktakeSnapshots.filter((s) => s.id !== id),
         })),
+      categories: DEFAULT_CATEGORIES,
+      addCategory: (name) =>
+        set((state) => ({
+          categories: state.categories.includes(name) ? state.categories : [...state.categories, name],
+        })),
+      removeCategory: (name) =>
+        set((state) => ({ categories: state.categories.filter((c) => c !== name) })),
+      makers: DEFAULT_MAKERS,
+      addMaker: (name) =>
+        set((state) => ({
+          makers: state.makers.includes(name) ? state.makers : [...state.makers, name],
+        })),
+      removeMaker: (name) =>
+        set((state) => ({ makers: state.makers.filter((m) => m !== name) })),
+      dealers: [],
+      addDealer: (name) =>
+        set((state) => ({
+          dealers: state.dealers.includes(name) ? state.dealers : [...state.dealers, name],
+        })),
+      removeDealer: (name) =>
+        set((state) => ({ dealers: state.dealers.filter((d) => d !== name) })),
+      dealerReps: [],
+      addDealerRep: (name) =>
+        set((state) => ({
+          dealerReps: state.dealerReps.includes(name) ? state.dealerReps : [...state.dealerReps, name],
+        })),
+      removeDealerRep: (name) =>
+        set((state) => ({ dealerReps: state.dealerReps.filter((r) => r !== name) })),
       setProductImages: (images) =>
         set((state) => ({
           products: state.products.map((p) =>
@@ -1081,7 +1141,6 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           products: data.products.map((fp) => ({
             ...fp,
-            // product-images コレクションから画像を取得するまでの間、ローカルキャッシュを維持
             image: state.products.find((lp) => lp.id === fp.id)?.image,
           })),
           stocks: data.stocks ?? state.stocks,
@@ -1092,11 +1151,15 @@ export const useAppStore = create<AppState>()(
           storeInfo: data.storeInfo ?? state.storeInfo,
           appSettings: data.appSettings ?? state.appSettings,
           stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
+          categories: data.categories ?? state.categories,
+          makers: data.makers ?? state.makers,
+          dealers: data.dealers ?? state.dealers,
+          dealerReps: data.dealerReps ?? state.dealerReps,
         })),
     }),
     {
       name: 'salon-inventory-store',
-      version: 7,
+      version: 8,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
@@ -1107,6 +1170,10 @@ export const useAppStore = create<AppState>()(
         storeInfo: state.storeInfo,
         appSettings: state.appSettings,
         stocktakeSnapshots: state.stocktakeSnapshots,
+        categories: state.categories,
+        makers: state.makers,
+        dealers: state.dealers,
+        dealerReps: state.dealerReps,
       }),
       migrate: (persistedState, fromVersion) => {
         const saved = persistedState as {
@@ -1119,6 +1186,10 @@ export const useAppStore = create<AppState>()(
           storeInfo?: { flag: StoreInfo; lien: StoreInfo }
           appSettings?: AppSettings
           stocktakeSnapshots?: StocktakeSnapshot[]
+          categories?: string[]
+          makers?: string[]
+          dealers?: string[]
+          dealerReps?: string[]
         }
         const products = saved.products ?? []
         const stocks = saved.stocks ?? []
@@ -1129,14 +1200,16 @@ export const useAppStore = create<AppState>()(
         const storeInfo = saved.storeInfo ?? DEFAULT_STORE_INFO
         const appSettings = { ...DEFAULT_APP_SETTINGS, ...(saved.appSettings ?? {}) }
         const stocktakeSnapshots = saved.stocktakeSnapshots ?? []
+        const categories = saved.categories ?? DEFAULT_CATEGORIES
+        const makers = saved.makers ?? DEFAULT_MAKERS
+        const dealers = saved.dealers ?? []
+        const dealerReps = saved.dealerReps ?? []
 
-        // fromVersion < 3: 初回インストール (ユーザーデータが存在しない場合のみ初期データを投入)
-        // ユーザーがすでにデータを設定している場合は絶対に上書きしない
         if (fromVersion < 3 && products.length === 0) {
-          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings, stocktakeSnapshots: [] }
+          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings, stocktakeSnapshots: [], categories, makers, dealers, dealerReps }
         }
 
-        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings, stocktakeSnapshots }
+        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
       },
     }
   )

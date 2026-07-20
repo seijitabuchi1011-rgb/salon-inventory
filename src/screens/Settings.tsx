@@ -8,8 +8,8 @@ import { useAppStore } from '../store'
 import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
 
-type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'セキュリティ' | 'データ管理'
-const SECTIONS: Section[] = ['店舗設定', 'スタッフ管理', '在庫アラート', '通知設定', 'セキュリティ', 'データ管理']
+type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'マスタ管理' | 'セキュリティ' | 'データ管理'
+const SECTIONS: Section[] = ['店舗設定', 'スタッフ管理', '在庫アラート', '通知設定', 'マスタ管理', 'セキュリティ', 'データ管理']
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -51,6 +51,48 @@ function Toast({ msg }: { msg: string }) {
   )
 }
 
+function MasterList({ label, items, onAdd, onRemove, showToast }: {
+  label: string
+  items: string[]
+  onAdd: (name: string) => void
+  onRemove: (name: string) => void
+  showToast: (msg: string) => void
+}) {
+  const [input, setInput] = useState('')
+  function add() {
+    const v = input.trim()
+    if (!v || items.includes(v)) return
+    onAdd(v); setInput(''); showToast(`「${v}」を追加しました`)
+  }
+  return (
+    <Card>
+      <p className="text-xs font-semibold text-muted mb-3">{label}（{items.length}件）</p>
+      <div className="flex flex-wrap gap-2 mb-3 min-h-[2rem]">
+        {items.map((item) => (
+          <span key={item} className="flex items-center gap-1 pl-3 pr-1.5 py-1 bg-bg border border-border rounded-full text-xs font-semibold text-text">
+            {item}
+            <button onClick={() => { onRemove(item); showToast(`「${item}」を削除しました`) }}
+              className="w-4 h-4 flex items-center justify-center rounded-full text-muted hover:bg-danger-soft hover:text-danger transition-colors">
+              ×
+            </button>
+          </span>
+        ))}
+        {items.length === 0 && <p className="text-xs text-faint py-1">まだ登録されていません</p>}
+      </div>
+      <div className="flex gap-2 pt-3 border-t border-border">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') add() }}
+          placeholder={`${label}名を入力`}
+          className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
+        />
+        <Btn variant="primary" size="sm" disabled={!input.trim() || items.includes(input.trim())} onClick={add}>＋ 追加</Btn>
+      </div>
+    </Card>
+  )
+}
+
 function downloadCSV(filename: string, rows: string[][]) {
   const bom = '﻿'
   const csv = bom + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -69,6 +111,10 @@ export function Settings() {
     storeInfo, setStoreInfo,
     appSettings, setAppSettings,
     staffMembers, addStaffMember, removeStaffMember,
+    categories, addCategory, removeCategory,
+    makers, addMaker, removeMaker,
+    dealers, addDealer, removeDealer,
+    dealerReps, addDealerRep, removeDealerRep,
   } = useAppStore()
 
   const [section, setSection] = useState<Section>('店舗設定')
@@ -485,6 +531,24 @@ export function Settings() {
                   <div className="flex justify-end">
                     <Btn variant="primary" onClick={saveNotifySettings}>変更を保存</Btn>
                   </div>
+                </>
+              )}
+
+              {/* マスタ管理 */}
+              {section === 'マスタ管理' && (
+                <>
+                  <h2 className="text-lg font-bold">マスタ管理</h2>
+                  <p className="text-sm text-muted -mt-3">ここで追加・削除した項目は商品登録画面のプルダウンに反映されます。</p>
+                  {(
+                    [
+                      { label: 'カテゴリー', items: categories, onAdd: addCategory, onRemove: removeCategory },
+                      { label: 'メーカー', items: makers, onAdd: addMaker, onRemove: removeMaker },
+                      { label: 'ディーラー', items: dealers, onAdd: addDealer, onRemove: removeDealer },
+                      { label: 'ディーラー担当', items: dealerReps, onAdd: addDealerRep, onRemove: removeDealerRep },
+                    ] as const
+                  ).map(({ label, items, onAdd, onRemove }) => (
+                    <MasterList key={label} label={label} items={items as string[]} onAdd={onAdd} onRemove={onRemove} showToast={showToast} />
+                  ))}
                 </>
               )}
 

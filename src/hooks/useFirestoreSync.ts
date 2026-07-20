@@ -7,6 +7,7 @@ export function useFirestoreSync() {
     products, stocks, transactions, transfers,
     staffPurchases, staffMembers, storeInfo, appSettings,
     stocktakeSnapshots,
+    categories, makers, dealers, dealerReps,
     setProductImages,
     loadFromFirestore,
   } = useAppStore()
@@ -53,6 +54,7 @@ export function useFirestoreSync() {
         products, stocks, transactions, transfers,
         staffPurchases, staffMembers, storeInfo, appSettings,
         stocktakeSnapshots,
+        categories, makers, dealers, dealerReps,
       }).catch((e) => console.error('[Firestore write]', e))
     }, 1500)
 
@@ -62,5 +64,6 @@ export function useFirestoreSync() {
     products, stocks, transactions, transfers,
     staffPurchases, staffMembers, storeInfo, appSettings,
     stocktakeSnapshots,
+    categories, makers, dealers, dealerReps,
   ])
 }
