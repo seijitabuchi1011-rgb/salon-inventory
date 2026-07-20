@@ -15,26 +15,27 @@ const NAV_ITEMS = [
   { path: '/settings', icon: '⚙', label: '設定' },
 ]
 
-export function SideNav() {
+export function BottomNav() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
   return (
-    <div className="hidden md:flex w-sidenav flex-shrink-0 bg-surface border-r border-border flex-col py-2 overflow-y-auto">
+    <div
+      className="md:hidden bg-surface border-t border-border flex overflow-x-auto"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       {NAV_ITEMS.map((item) => {
         const active = pathname === item.path
         return (
           <button
             key={item.path}
             onClick={() => navigate(item.path)}
-            className={`flex flex-col items-center justify-center h-[68px] gap-1 text-center transition-colors w-full ${
-              active
-                ? 'bg-accent-soft text-accent border-r-2 border-accent'
-                : 'text-muted hover:bg-bg hover:text-text'
+            className={`flex flex-col items-center justify-center flex-shrink-0 w-[72px] h-14 gap-0.5 transition-colors ${
+              active ? 'text-accent' : 'text-muted'
             }`}
           >
             <span className="text-lg leading-none">{item.icon}</span>
-            <span className="text-[10px] font-semibold leading-tight">{item.label}</span>
+            <span className="text-[9px] font-semibold leading-tight text-center">{item.label}</span>
           </button>
         )
       })}

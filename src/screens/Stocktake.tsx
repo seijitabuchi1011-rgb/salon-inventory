@@ -365,28 +365,28 @@ export function Stocktake() {
             </div>
 
             {/* サマリーカード */}
-            <div className="grid grid-cols-5 gap-3 mb-4">
-              <Card className="flex flex-col gap-1">
+            <div className="flex gap-3 mb-4 overflow-x-auto pb-0.5">
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[90px]">
                 <span className="text-xs text-muted font-semibold">進捗</span>
                 <span className="text-3xl font-bold text-accent">{progress}%</span>
                 <span className="text-xs text-faint">{month}</span>
               </Card>
-              <Card className="flex flex-col gap-1">
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[90px]">
                 <span className="text-xs text-muted font-semibold">確認済</span>
                 <span className="text-3xl font-bold text-ok">{confirmed}</span>
                 <span className="text-xs text-faint">/ {items.length} 商品</span>
               </Card>
-              <Card className="flex flex-col gap-1">
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[90px]">
                 <span className="text-xs text-muted font-semibold">未確認</span>
                 <span className="text-3xl font-bold text-text">{items.length - confirmed}</span>
                 <span className="text-xs text-faint">残り</span>
               </Card>
-              <Card className="flex flex-col gap-1">
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[90px]">
                 <span className="text-xs text-muted font-semibold">差異あり</span>
                 <span className="text-3xl font-bold text-danger">{diffCount}</span>
                 <span className="text-xs text-faint">要確認</span>
               </Card>
-              <Card className="flex flex-col gap-1 border-accent">
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[120px] border-accent">
                 <span className="text-xs text-accent font-semibold">在庫合計金額</span>
                 <span className="text-2xl font-bold text-text leading-tight">
                   ¥{totalValue.toLocaleString()}
@@ -559,7 +559,7 @@ export function Stocktake() {
       {/* 棚卸完了確認モーダル */}
       {showCompleteModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-96 shadow-xl flex flex-col gap-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm mx-4 shadow-xl flex flex-col gap-4">
             <div>
               <p className="text-lg font-bold text-text">棚卸を完了しますか？</p>
               <p className="text-xs text-muted mt-1">

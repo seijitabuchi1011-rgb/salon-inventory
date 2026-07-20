@@ -51,11 +51,15 @@ export default {
       spacing: {
         sidenav: '88px',
         status: '24px',
+        appbar: '52px',
         'btn-md': '52px',
         'btn-lg': '60px',
       },
       width: {
         sidenav: '88px',
+      },
+      height: {
+        appbar: '52px',
       },
     },
   },

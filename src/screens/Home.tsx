@@ -119,7 +119,7 @@ export function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
             {kpiCards.map((k) => (
               <button
                 key={k.label}
@@ -135,7 +135,7 @@ export function Home() {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {TILES.map((tile) => {
               const badge = tile.path === '/low-stock' ? lowBadge : tile.badge
               return (

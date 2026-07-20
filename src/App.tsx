@@ -12,6 +12,7 @@ import { MonthlyPurchases } from './screens/MonthlyPurchases'
 import { StaffScreen } from './screens/Staff'
 import { Settings } from './screens/Settings'
 import { useFirestoreSync } from './hooks/useFirestoreSync'
+import { BottomNav } from './components/BottomNav'
 
 function AppRoutes() {
   useFirestoreSync()
@@ -38,7 +39,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <HashRouter>
-      <AppRoutes />
+      <div className="h-full flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <AppRoutes />
+        </div>
+        <BottomNav />
+      </div>
     </HashRouter>
   )
 }
