@@ -47,9 +47,11 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
 }
 
 export async function writeToFirestore(data: FirestoreData): Promise<void> {
-  // Strip product images before writing — they can be large (base64)
-  // and would quickly exceed Firestore's 1 MB document limit.
-  // Images are kept in localStorage per device.
-  const products = data.products.map(({ image: _img, ...rest }) => rest)
+  // base64 画像 (data: URI) は除外 — Firestore の 1MB 制限を超えるため
+  // Firebase Storage にアップロード済みの URL はそのまま保存する
+  const products = data.products.map((p) => ({
+    ...p,
+    image: p.image?.startsWith('data:') ? undefined : p.image,
+  }))
   await setDoc(STORE_DOC, { ...data, products })
 }

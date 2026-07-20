@@ -1074,8 +1074,8 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           products: data.products.map((fp) => ({
             ...fp,
-            // 画像はデバイスローカル (localStorage) にのみ保存 — Firestore には入れない
-            image: state.products.find((lp) => lp.id === fp.id)?.image,
+            // Firestore に URL があればそれを使う。なければローカル保存の画像を維持（移行期の後方互換）
+            image: fp.image ?? state.products.find((lp) => lp.id === fp.id)?.image,
           })),
           stocks: data.stocks ?? state.stocks,
           transactions: data.transactions ?? state.transactions,

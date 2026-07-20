@@ -5,6 +5,7 @@ import { SideNav } from '../components/SideNav'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import { uploadProductImage } from '../lib/storage'
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
@@ -68,6 +69,7 @@ export function ProductEdit() {
   const [memo, setMemo] = useState(existing?.memo ?? '')
   const [taxRate, setTaxRate] = useState<8 | 10>(existing?.taxRate ?? 10)
   const [image, setImage] = useState(existing?.image ?? '')
+  const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // useState の初期値は初回レンダリング時のみ評価されるため、
@@ -119,23 +121,35 @@ export function ProductEdit() {
     e.target.value = ''
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setUploading(true)
     const productId = existing?.id ?? String(Date.now())
-    upsertProduct({
-      id: productId,
-      name,
-      category,
-      maker,
-      barcode,
-      purchasePrice: Number(purchasePrice) || 0,
-      sellPrice: Number(sellPrice) || 0,
-      taxRate,
-      image: image || undefined,
-      memo,
-    })
-    upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
-    upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
-    goBack()
+    try {
+      let finalImage = image || undefined
+      // base64 画像なら Firebase Storage にアップロードして URL に変換
+      if (image?.startsWith('data:')) {
+        finalImage = await uploadProductImage(productId, image)
+      }
+      upsertProduct({
+        id: productId,
+        name,
+        category,
+        maker,
+        barcode,
+        purchasePrice: Number(purchasePrice) || 0,
+        sellPrice: Number(sellPrice) || 0,
+        taxRate,
+        image: finalImage,
+        memo,
+      })
+      upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
+      upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
+      goBack()
+    } catch (e) {
+      console.error('[画像アップロード失敗]', e)
+      alert('画像のアップロードに失敗しました。Firebase Storage のルールを確認してください。')
+      setUploading(false)
+    }
   }
 
   return (
@@ -148,8 +162,10 @@ export function ProductEdit() {
         showStoreSwitch={false}
         right={
           <div className="flex gap-2">
-            <Btn variant="ghost" size="sm" onClick={goBack}>キャンセル</Btn>
-            <Btn variant="primary" size="sm" onClick={handleSave}>✓ 保存</Btn>
+            <Btn variant="ghost" size="sm" onClick={goBack} disabled={uploading}>キャンセル</Btn>
+            <Btn variant="primary" size="sm" onClick={handleSave} disabled={uploading}>
+              {uploading ? '保存中...' : '✓ 保存'}
+            </Btn>
           </div>
         }
       />
@@ -170,8 +186,8 @@ export function ProductEdit() {
                     onChange={handleImageFile}
                   />
                   <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="h-48 rounded-md border border-dashed border-border-strong flex flex-col items-center justify-center gap-2 cursor-pointer active:opacity-70 overflow-hidden"
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    className="relative h-48 rounded-md border border-dashed border-border-strong flex flex-col items-center justify-center gap-2 cursor-pointer active:opacity-70 overflow-hidden"
                     style={image ? {} : { background: 'repeating-linear-gradient(45deg, #F1F1EE 0 8px, #E8E8E4 8px 16px)' }}
                   >
                     {image ? (
@@ -181,6 +197,12 @@ export function ProductEdit() {
                         <span className="text-2xl text-muted">＋</span>
                         <span className="text-sm text-muted">タップして画像を追加</span>
                       </>
+                    )}
+                    {uploading && (
+                      <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
+                        <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span className="text-xs text-white font-semibold">アップロード中...</span>
+                      </div>
                     )}
                   </div>
                   {image && (
