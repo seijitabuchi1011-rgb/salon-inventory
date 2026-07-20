@@ -99,15 +99,15 @@ export function ProductEdit() {
     reader.onload = (ev) => {
       const img = new window.Image()
       img.onload = () => {
-        const MAX = 300
-        let w = img.width, h = img.height
-        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
-        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const SIZE = 300
+        const side = Math.min(img.width, img.height)
+        const sx = (img.width - side) / 2
+        const sy = (img.height - side) / 2
         const canvas = document.createElement('canvas')
-        canvas.width = w
-        canvas.height = h
-        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
-        setImage(canvas.toDataURL('image/jpeg', 0.65))
+        canvas.width = SIZE
+        canvas.height = SIZE
+        canvas.getContext('2d')!.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE)
+        setImage(canvas.toDataURL('image/jpeg', 0.75))
       }
       img.src = ev.target?.result as string
     }
