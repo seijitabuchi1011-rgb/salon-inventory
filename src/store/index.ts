@@ -17,6 +17,7 @@ export interface AppSettings {
   notifyOrder: boolean
   notifyTransfer: boolean
   notifyStocktake: boolean
+  pin: string
 }
 
 const DEFAULT_STORE_INFO: { flag: StoreInfo; lien: StoreInfo } = {
@@ -33,6 +34,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   notifyOrder: true,
   notifyTransfer: false,
   notifyStocktake: true,
+  pin: '',
 }
 
 // Firestore に保存するデータ型（画像は除外）

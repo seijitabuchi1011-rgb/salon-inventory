@@ -13,6 +13,7 @@ import { StaffScreen } from './screens/Staff'
 import { Settings } from './screens/Settings'
 import { useFirestoreSync } from './hooks/useFirestoreSync'
 import { BottomNav } from './components/BottomNav'
+import { PinGate } from './components/PinGate'
 
 function AppRoutes() {
   useFirestoreSync()
@@ -39,12 +40,14 @@ function AppRoutes() {
 export default function App() {
   return (
     <HashRouter>
-      <div className="h-full flex flex-col">
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <AppRoutes />
+      <PinGate>
+        <div className="h-full flex flex-col">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <AppRoutes />
+          </div>
+          <BottomNav />
         </div>
-        <BottomNav />
-      </div>
+      </PinGate>
     </HashRouter>
   )
 }

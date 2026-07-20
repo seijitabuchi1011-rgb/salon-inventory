@@ -8,8 +8,8 @@ import { useAppStore } from '../store'
 import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
 
-type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'データ管理'
-const SECTIONS: Section[] = ['店舗設定', 'スタッフ管理', '在庫アラート', '通知設定', 'データ管理']
+type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'セキュリティ' | 'データ管理'
+const SECTIONS: Section[] = ['店舗設定', 'スタッフ管理', '在庫アラート', '通知設定', 'セキュリティ', 'データ管理']
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -82,6 +82,67 @@ export function Settings() {
   // 在庫アラートローカル状態
   const [flagMin, setFlagMin] = useState(appSettings.flagMinStock)
   const [lienMin, setLienMin] = useState(appSettings.lienMinStock)
+
+  // セキュリティ — PIN設定状態
+  type PinStep = 'menu' | 'set-new' | 'set-confirm' | 'change-current' | 'change-new' | 'change-confirm' | 'delete-confirm'
+  const [pinStep, setPinStep] = useState<PinStep>('menu')
+  const [pinInput, setPinInput] = useState('')
+  const [pinFirst, setPinFirst] = useState('')  // 新規PINの1回目入力を一時保持
+
+  function pinPress(key: string) {
+    if (key === '⌫') { setPinInput((d) => d.slice(0, -1)); return }
+    if (pinInput.length >= 4) return
+    const next = pinInput + key
+    setPinInput(next)
+    if (next.length < 4) return
+
+    // 4桁揃ったときの処理
+    setTimeout(() => {
+      if (pinStep === 'set-new') {
+        setPinFirst(next); setPinInput(''); setPinStep('set-confirm')
+      } else if (pinStep === 'set-confirm') {
+        if (next === pinFirst) {
+          setAppSettings({ pin: next }); sessionStorage.setItem('salon-auth', '1')
+          setPinStep('menu'); setPinInput(''); showToast('PINを設定しました')
+        } else {
+          showToast('PINが一致しません。もう一度'); setPinInput(''); setPinStep('set-new')
+        }
+      } else if (pinStep === 'change-current') {
+        if (next === appSettings.pin) {
+          setPinInput(''); setPinStep('change-new')
+        } else {
+          showToast('現在のPINが違います'); setPinInput('')
+        }
+      } else if (pinStep === 'change-new') {
+        setPinFirst(next); setPinInput(''); setPinStep('change-confirm')
+      } else if (pinStep === 'change-confirm') {
+        if (next === pinFirst) {
+          setAppSettings({ pin: next }); sessionStorage.setItem('salon-auth', '1')
+          setPinStep('menu'); setPinInput(''); showToast('PINを変更しました')
+        } else {
+          showToast('PINが一致しません。もう一度'); setPinInput(''); setPinStep('change-new')
+        }
+      } else if (pinStep === 'delete-confirm') {
+        if (next === appSettings.pin) {
+          setAppSettings({ pin: '' }); sessionStorage.removeItem('salon-auth')
+          setPinStep('menu'); setPinInput(''); showToast('PINを削除しました')
+        } else {
+          showToast('PINが違います'); setPinInput('')
+        }
+      }
+    }, 80)
+  }
+
+  const PIN_STEP_LABEL: Record<PinStep, string> = {
+    'menu': '',
+    'set-new': '新しい4桁のPINを入力',
+    'set-confirm': 'もう一度入力して確認',
+    'change-current': '現在のPINを入力',
+    'change-new': '新しいPINを入力',
+    'change-confirm': '新しいPINをもう一度入力',
+    'delete-confirm': '現在のPINを入力して解除',
+  }
+  const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫']
 
   // 通知設定ローカル状態
   const [notifyLowStockFlag, setNotifyLowStockFlag] = useState(appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock)
@@ -424,6 +485,85 @@ export function Settings() {
                   <div className="flex justify-end">
                     <Btn variant="primary" onClick={saveNotifySettings}>変更を保存</Btn>
                   </div>
+                </>
+              )}
+
+              {/* セキュリティ */}
+              {section === 'セキュリティ' && (
+                <>
+                  <h2 className="text-lg font-bold">セキュリティ</h2>
+
+                  {pinStep === 'menu' ? (
+                    <Card>
+                      <p className="text-xs font-semibold text-muted mb-3">PIN認証</p>
+                      <Row label="現在の状態">
+                        <span className={`text-sm font-semibold ${appSettings.pin ? 'text-accent' : 'text-muted'}`}>
+                          {appSettings.pin ? '🔒 設定済み' : '🔓 未設定'}
+                        </span>
+                      </Row>
+                      {!appSettings.pin ? (
+                        <Row label="PINを設定する" sub="4桁の数字でアプリをロック">
+                          <Btn variant="primary" size="sm" onClick={() => { setPinInput(''); setPinStep('set-new') }}>設定する</Btn>
+                        </Row>
+                      ) : (
+                        <>
+                          <Row label="PINを変更する" sub="現在のPINを確認してから変更">
+                            <Btn variant="ghost" size="sm" onClick={() => { setPinInput(''); setPinStep('change-current') }}>変更</Btn>
+                          </Row>
+                          <Row label="PINを解除する" sub="認証なしでアプリを開けるようになります">
+                            <Btn variant="ghost" size="sm" onClick={() => { setPinInput(''); setPinStep('delete-confirm') }}>解除</Btn>
+                          </Row>
+                        </>
+                      )}
+                    </Card>
+                  ) : (
+                    <Card>
+                      <div className="flex flex-col items-center py-4 gap-6">
+                        <p className="text-sm font-semibold text-text">{PIN_STEP_LABEL[pinStep]}</p>
+
+                        {/* ドット表示 */}
+                        <div className="flex gap-5">
+                          {[0,1,2,3].map((i) => (
+                            <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all ${i < pinInput.length ? 'bg-accent border-accent' : 'border-border-strong'}`} />
+                          ))}
+                        </div>
+
+                        {/* 数字パッド */}
+                        <div className="grid grid-cols-3 gap-2 w-60">
+                          {PAD.map((key, i) =>
+                            key === '' ? <div key={i} /> : (
+                              <button
+                                key={i}
+                                onClick={() => pinPress(key)}
+                                className={`h-14 rounded-xl text-xl font-semibold transition-all active:scale-95 ${
+                                  key === '⌫'
+                                    ? 'bg-bg border border-border text-muted'
+                                    : 'bg-surface border border-border text-text shadow-sm'
+                                }`}
+                              >
+                                {key}
+                              </button>
+                            )
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => { setPinStep('menu'); setPinInput('') }}
+                          className="text-sm text-muted hover:text-text transition-colors"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </Card>
+                  )}
+
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-1">セキュリティについて</p>
+                    <p className="text-xs text-faint leading-relaxed">
+                      PINはアプリを開くときに入力します。5回連続で間違えると30秒間ロックされます。
+                      PINはこのデバイスのセッションに保存されます。ブラウザを閉じると再度入力が必要です。
+                    </p>
+                  </Card>
                 </>
               )}
 
