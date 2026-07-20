@@ -99,15 +99,19 @@ export function ProductEdit() {
     reader.onload = (ev) => {
       const img = new window.Image()
       img.onload = () => {
-        const SIZE = 300
+        const MAX = 600
         const side = Math.min(img.width, img.height)
+        const size = Math.min(side, MAX) // 引き伸ばさない・大きければ縮小
         const sx = (img.width - side) / 2
         const sy = (img.height - side) / 2
         const canvas = document.createElement('canvas')
-        canvas.width = SIZE
-        canvas.height = SIZE
-        canvas.getContext('2d')!.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE)
-        setImage(canvas.toDataURL('image/jpeg', 0.75))
+        canvas.width = size
+        canvas.height = size
+        const ctx = canvas.getContext('2d')!
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size)
+        setImage(canvas.toDataURL('image/jpeg', 0.82))
       }
       img.src = ev.target?.result as string
     }
