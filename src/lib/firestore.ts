@@ -1,4 +1,4 @@
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { doc, collection, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import type { FirestoreData } from '../store'
 
@@ -47,11 +47,31 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
 }
 
 export async function writeToFirestore(data: FirestoreData): Promise<void> {
-  // base64 画像 (data: URI) は除外 — Firestore の 1MB 制限を超えるため
-  // Firebase Storage にアップロード済みの URL はそのまま保存する
-  const products = data.products.map((p) => ({
-    ...p,
-    image: p.image?.startsWith('data:') ? undefined : p.image,
-  }))
+  // 画像は product-images コレクションで管理するため、メインドキュメントからは除外
+  const products = data.products.map(({ image: _img, ...rest }) => rest)
   await setDoc(STORE_DOC, { ...data, products })
+}
+
+// --- product-images コレクション ---
+// 各商品の画像を独立ドキュメントとして保存することで Firestore の 1MB 制限を回避
+
+export async function writeProductImage(productId: string, imageData: string): Promise<void> {
+  await setDoc(doc(db, 'product-images', productId), { image: imageData })
+}
+
+export async function deleteProductImage(productId: string): Promise<void> {
+  await deleteDoc(doc(db, 'product-images', productId))
+}
+
+export function subscribeToProductImages(
+  onUpdate: (images: Record<string, string>) => void
+) {
+  return onSnapshot(collection(db, 'product-images'), (snapshot) => {
+    const images: Record<string, string> = {}
+    snapshot.forEach((d) => {
+      const data = d.data()
+      if (data.image) images[d.id] = data.image as string
+    })
+    onUpdate(images)
+  })
 }

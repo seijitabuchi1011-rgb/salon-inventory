@@ -86,6 +86,7 @@ interface AppState {
   stocktakeSnapshots: StocktakeSnapshot[]
   addStocktakeSnapshot: (s: Omit<StocktakeSnapshot, 'id'>) => void
   deleteStocktakeSnapshot: (id: string) => void
+  setProductImages: (images: Record<string, string>) => void
   loadFromFirestore: (data: FirestoreData) => void
 }
 
@@ -1070,12 +1071,18 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           stocktakeSnapshots: state.stocktakeSnapshots.filter((s) => s.id !== id),
         })),
+      setProductImages: (images) =>
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id in images ? { ...p, image: images[p.id] || undefined } : p
+          ),
+        })),
       loadFromFirestore: (data) =>
         set((state) => ({
           products: data.products.map((fp) => ({
             ...fp,
-            // Firestore に URL があればそれを使う。なければローカル保存の画像を維持（移行期の後方互換）
-            image: fp.image ?? state.products.find((lp) => lp.id === fp.id)?.image,
+            // product-images コレクションから画像を取得するまでの間、ローカルキャッシュを維持
+            image: state.products.find((lp) => lp.id === fp.id)?.image,
           })),
           stocks: data.stocks ?? state.stocks,
           transactions: data.transactions ?? state.transactions,

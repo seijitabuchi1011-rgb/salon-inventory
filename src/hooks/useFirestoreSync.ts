@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { subscribeToFirestore, writeToFirestore } from '../lib/firestore'
+import { subscribeToFirestore, subscribeToProductImages, writeToFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
 export function useFirestoreSync() {
@@ -7,6 +7,7 @@ export function useFirestoreSync() {
     products, stocks, transactions, transfers,
     staffPurchases, staffMembers, storeInfo, appSettings,
     stocktakeSnapshots,
+    setProductImages,
     loadFromFirestore,
   } = useAppStore()
 
@@ -33,6 +34,12 @@ export function useFirestoreSync() {
       },
     })
 
+    return () => unsubscribe()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // product-images コレクションを購読 — 他デバイスで登録された画像を即時反映
+  useEffect(() => {
+    const unsubscribe = subscribeToProductImages(setProductImages)
     return () => unsubscribe()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

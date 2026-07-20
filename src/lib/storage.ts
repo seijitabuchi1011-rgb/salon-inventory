@@ -1,8 +1,3 @@
-import { ref, uploadString, getDownloadURL } from 'firebase/storage'
-import { storage } from './firebase'
-
-export async function uploadProductImage(productId: string, dataUrl: string): Promise<string> {
-  const storageRef = ref(storage, `product-images/${productId}.jpg`)
-  await uploadString(storageRef, dataUrl, 'data_url')
-  return getDownloadURL(storageRef)
-}
+// Firebase Storage は未使用 (Blaze プランが必要なため)
+// 画像は src/lib/firestore.ts の writeProductImage で Firestore に保存する
+export {}

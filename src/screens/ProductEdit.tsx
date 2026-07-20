@@ -5,7 +5,7 @@ import { SideNav } from '../components/SideNav'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
-import { uploadProductImage } from '../lib/storage'
+import { writeProductImage, deleteProductImage } from '../lib/firestore'
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
@@ -125,10 +125,12 @@ export function ProductEdit() {
     setUploading(true)
     const productId = existing?.id ?? String(Date.now())
     try {
-      let finalImage = image || undefined
-      // base64 画像なら Firebase Storage にアップロードして URL に変換
       if (image?.startsWith('data:')) {
-        finalImage = await uploadProductImage(productId, image)
+        // 新しい base64 画像 → product-images コレクションに保存（全デバイスに同期）
+        await writeProductImage(productId, image)
+      } else if (!image && existing) {
+        // 画像が削除された → product-images コレクションからも削除
+        await deleteProductImage(productId).catch(() => {})
       }
       upsertProduct({
         id: productId,
@@ -139,15 +141,15 @@ export function ProductEdit() {
         purchasePrice: Number(purchasePrice) || 0,
         sellPrice: Number(sellPrice) || 0,
         taxRate,
-        image: finalImage,
+        image: image || undefined,
         memo,
       })
       upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
       upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
       goBack()
     } catch (e) {
-      console.error('[画像アップロード失敗]', e)
-      alert('画像のアップロードに失敗しました。Firebase Storage のルールを確認してください。')
+      console.error('[画像保存失敗]', e)
+      alert('画像の保存に失敗しました。')
       setUploading(false)
     }
   }
