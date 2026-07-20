@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
@@ -18,19 +18,22 @@ function Field({ label, required, children }: { label: string; required?: boolea
   )
 }
 
-function TextInput({ value, onChange, placeholder, prefix }: { value: string; onChange: (v: string) => void; placeholder?: string; prefix?: string }) {
-  return (
-    <div className="flex items-center h-btn-md border border-border-strong rounded-md px-4 gap-2 bg-surface focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
-      {prefix && <span className="text-faint">{prefix}</span>}
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="flex-1 text-sm bg-transparent outline-none text-text placeholder:text-faint"
-      />
-    </div>
-  )
-}
+const TextInput = forwardRef<HTMLInputElement, { value: string; onChange: (v: string) => void; placeholder?: string; prefix?: string }>(
+  function TextInput({ value, onChange, placeholder, prefix }, ref) {
+    return (
+      <div className="flex items-center h-btn-md border border-border-strong rounded-md px-4 gap-2 bg-surface focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
+        {prefix && <span className="text-faint">{prefix}</span>}
+        <input
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 text-sm bg-transparent outline-none text-text placeholder:text-faint"
+        />
+      </div>
+    )
+  }
+)
 
 function NumberInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -70,7 +73,9 @@ export function ProductEdit() {
   const [taxRate, setTaxRate] = useState<8 | 10>(existing?.taxRate ?? 10)
   const [image, setImage] = useState(existing?.image ?? '')
   const [uploading, setUploading] = useState(false)
+  const [savedToast, setSavedToast] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   // useState の初期値は初回レンダリング時のみ評価されるため、
   // zustand の localStorage 復元後に確実に同期する
@@ -121,32 +126,48 @@ export function ProductEdit() {
     e.target.value = ''
   }
 
+  async function doSave(productId: string) {
+    if (image?.startsWith('data:')) {
+      await writeProductImage(productId, image)
+    } else if (!image && existing) {
+      await deleteProductImage(productId).catch(() => {})
+    }
+    upsertProduct({
+      id: productId, name, category, maker, barcode,
+      purchasePrice: Number(purchasePrice) || 0,
+      sellPrice: Number(sellPrice) || 0,
+      taxRate,
+      image: image || undefined,
+      memo,
+    })
+    upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
+    upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
+  }
+
   const handleSave = async () => {
     setUploading(true)
-    const productId = existing?.id ?? String(Date.now())
     try {
-      if (image?.startsWith('data:')) {
-        // 新しい base64 画像 → product-images コレクションに保存（全デバイスに同期）
-        await writeProductImage(productId, image)
-      } else if (!image && existing) {
-        // 画像が削除された → product-images コレクションからも削除
-        await deleteProductImage(productId).catch(() => {})
-      }
-      upsertProduct({
-        id: productId,
-        name,
-        category,
-        maker,
-        barcode,
-        purchasePrice: Number(purchasePrice) || 0,
-        sellPrice: Number(sellPrice) || 0,
-        taxRate,
-        image: image || undefined,
-        memo,
-      })
-      upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
-      upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
+      await doSave(existing?.id ?? String(Date.now()))
       goBack()
+    } catch (e) {
+      console.error('[画像保存失敗]', e)
+      alert('画像の保存に失敗しました。')
+      setUploading(false)
+    }
+  }
+
+  const handleSaveAndNext = async () => {
+    if (!name.trim()) { nameInputRef.current?.focus(); return }
+    setUploading(true)
+    try {
+      await doSave(String(Date.now()))
+      // カテゴリ・メーカー・税率・下限数はそのまま維持して次の商品へ
+      setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
+      setMemo(''); setImage(''); setFlagStock(0); setLienStock(0)
+      setUploading(false)
+      setSavedToast(true)
+      setTimeout(() => setSavedToast(false), 1800)
+      setTimeout(() => nameInputRef.current?.focus(), 50)
     } catch (e) {
       console.error('[画像保存失敗]', e)
       alert('画像の保存に失敗しました。')
@@ -165,6 +186,11 @@ export function ProductEdit() {
         right={
           <div className="flex gap-2">
             <Btn variant="ghost" size="sm" onClick={goBack} disabled={uploading}>キャンセル</Btn>
+            {!existing && (
+              <Btn variant="ghost" size="sm" onClick={handleSaveAndNext} disabled={uploading}>
+                {uploading ? '...' : '＋ 次へ'}
+              </Btn>
+            )}
             <Btn variant="primary" size="sm" onClick={handleSave} disabled={uploading}>
               {uploading ? '保存中...' : '✓ 保存'}
             </Btn>
@@ -250,7 +276,7 @@ export function ProductEdit() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <Field label="商品名" required>
-                    <TextInput value={name} onChange={setName} placeholder="商品名を入力" />
+                    <TextInput ref={nameInputRef} value={name} onChange={setName} placeholder="商品名を入力" />
                   </Field>
                 </div>
 
@@ -419,6 +445,12 @@ export function ProductEdit() {
           </div>
         </main>
       </div>
+
+      {savedToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-text text-white text-sm font-semibold px-5 py-2.5 rounded-full shadow-lg pointer-events-none">
+          登録しました ✓
+        </div>
+      )}
     </div>
   )
 }
