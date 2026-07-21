@@ -171,7 +171,7 @@ export function Settings() {
     setMinStockEdits((prev) => {
       const merged = { ...prev }
       storeOrder.forEach((id) => {
-        if (!(id in merged)) merged[id] = appSettings.minStockByStore[id] ?? 3
+        if (!(id in merged)) merged[id] = appSettings.minStockByStore?.[id] ?? 3
       })
       return merged
     })

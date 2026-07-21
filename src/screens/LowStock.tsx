@@ -98,7 +98,7 @@ export function LowStock() {
               <div className="flex gap-2 flex-shrink-0">
                 <Btn variant="ghost" size="sm" onClick={exportCsv}>CSV</Btn>
                 <Btn variant="primary" size="sm" disabled={selected.size === 0}>
-                  ↧ {selected.size}件まとめて発注
+                  {selected.size === 0 ? '↧ 発注（行を選択）' : `↧ ${selected.size}件 発注`}
                 </Btn>
               </div>
             </div>
@@ -126,23 +126,23 @@ export function LowStock() {
               </div>
             ) : (
               <>
-                {/* モバイル: カードリスト */}
+                {/* モバイル: カードリスト（カード全体タップで選択） */}
                 <div className="md:hidden divide-y divide-border">
                   {filtered.map((p) => {
                     const checked = selected.has(p.id)
                     return (
-                      <div
+                      <button
                         key={p.id}
-                        className={`px-4 py-3 flex items-start gap-3 ${checked ? 'bg-accent-soft' : ''}`}
+                        onClick={() => toggle(p.id)}
+                        className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${checked ? 'bg-accent-soft' : ''}`}
                       >
-                        <button
-                          onClick={() => toggle(p.id)}
-                          className={`w-5 h-5 mt-0.5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
+                        <span
+                          className={`w-6 h-6 mt-0.5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
                             checked ? 'bg-text border-text text-white' : 'border-border-strong'
                           }`}
                         >
                           {checked && <span className="text-xs leading-none">✓</span>}
-                        </button>
+                        </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-semibold text-text text-sm truncate">{p.name}</span>
@@ -162,8 +162,7 @@ export function LowStock() {
                             </span>
                           </div>
                         </div>
-                        <Btn variant="ghost" size="sm">発注</Btn>
-                      </div>
+                      </button>
                     )
                   })}
                 </div>

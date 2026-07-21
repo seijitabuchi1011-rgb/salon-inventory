@@ -1166,25 +1166,48 @@ export const useAppStore = create<AppState>()(
           ),
         })),
       loadFromFirestore: (data) =>
-        set((state) => ({
-          products: data.products.map((fp) => ({
-            ...fp,
-            image: state.products.find((lp) => lp.id === fp.id)?.image,
-          })),
-          stocks: data.stocks ?? state.stocks,
-          transactions: data.transactions ?? state.transactions,
-          transfers: data.transfers ?? state.transfers,
-          staffPurchases: data.staffPurchases ?? state.staffPurchases,
-          staffMembers: data.staffMembers ?? state.staffMembers,
-          storeInfo: data.storeInfo ?? state.storeInfo,
-          storeOrder: data.storeOrder ?? state.storeOrder,
-          appSettings: data.appSettings ?? state.appSettings,
-          stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
-          categories: data.categories ?? state.categories,
-          makers: data.makers ?? state.makers,
-          dealers: data.dealers ?? state.dealers,
-          dealerReps: data.dealerReps ?? state.dealerReps,
-        })),
+        set((state) => {
+          // 旧フォーマット（flagMinStock/notifyLowStockFlag等）からの移行を保証
+          const raw = ((data.appSettings ?? {}) as unknown) as Record<string, unknown>
+          const migratedSettings: AppSettings = {
+            minStockByStore:
+              (raw.minStockByStore as Record<string, number> | undefined) ??
+              {
+                flag: (raw.flagMinStock as number | undefined) ?? state.appSettings.minStockByStore?.flag ?? 5,
+                lien: (raw.lienMinStock as number | undefined) ?? state.appSettings.minStockByStore?.lien ?? 3,
+              },
+            notifyLowStockByStore:
+              (raw.notifyLowStockByStore as Record<string, boolean> | undefined) ??
+              {
+                flag: (raw.notifyLowStockFlag as boolean | undefined) ?? true,
+                lien: (raw.notifyLowStockLien as boolean | undefined) ?? true,
+              },
+            notifyLowStock: (raw.notifyLowStock as boolean | undefined) ?? state.appSettings.notifyLowStock,
+            notifyOrder: (raw.notifyOrder as boolean | undefined) ?? state.appSettings.notifyOrder,
+            notifyTransfer: (raw.notifyTransfer as boolean | undefined) ?? state.appSettings.notifyTransfer,
+            notifyStocktake: (raw.notifyStocktake as boolean | undefined) ?? state.appSettings.notifyStocktake,
+            pin: (raw.pin as string | undefined) ?? state.appSettings.pin,
+          }
+          return {
+            products: data.products.map((fp) => ({
+              ...fp,
+              image: state.products.find((lp) => lp.id === fp.id)?.image,
+            })),
+            stocks: data.stocks ?? state.stocks,
+            transactions: data.transactions ?? state.transactions,
+            transfers: data.transfers ?? state.transfers,
+            staffPurchases: data.staffPurchases ?? state.staffPurchases,
+            staffMembers: data.staffMembers ?? state.staffMembers,
+            storeInfo: data.storeInfo ?? state.storeInfo,
+            storeOrder: data.storeOrder ?? state.storeOrder,
+            appSettings: data.appSettings ? migratedSettings : state.appSettings,
+            stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
+            categories: data.categories ?? state.categories,
+            makers: data.makers ?? state.makers,
+            dealers: data.dealers ?? state.dealers,
+            dealerReps: data.dealerReps ?? state.dealerReps,
+          }
+        }),
     }),
     {
       name: 'salon-inventory-store',
