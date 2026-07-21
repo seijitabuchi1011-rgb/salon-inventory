@@ -1,23 +1,24 @@
 import { useState } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
+import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
 import { sendNotification } from '../lib/email'
 import type { StoreId } from '../types'
 
-type Direction = 'flag-to-lien' | 'lien-to-flag'
-
 export function Transfer() {
   const {
-    products, stocks, transfers,
+    products, stocks, transfers, storeInfo, storeOrder,
     directTransfer, deleteTransfer,
     approveTransfer, rejectTransfer,
     appSettings,
   } = useAppStore()
 
-  const [direction, setDirection] = useState<Direction>('flag-to-lien')
-  const fromStore: StoreId = direction === 'flag-to-lien' ? 'flag' : 'lien'
-  const toStore: StoreId = direction === 'flag-to-lien' ? 'lien' : 'flag'
+  const defaultFrom: StoreId = storeOrder[0] ?? 'flag'
+  const defaultTo: StoreId = storeOrder[1] ?? 'lien'
+
+  const [fromStore, setFromStore] = useState<StoreId>(defaultFrom)
+  const [toStore, setToStore] = useState<StoreId>(defaultTo)
 
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState('')
@@ -37,6 +38,13 @@ export function Transfer() {
   const selectedProduct = selectedId ? products.find((p) => p.id === selectedId) : null
   const fromStock = selectedId ? getStock(selectedId, fromStore) : 0
 
+  const fromInfo = storeInfo[fromStore]
+  const toInfo = storeInfo[toStore]
+  const fromLabel = fromInfo?.name ?? fromStore
+  const toLabel = toInfo?.name ?? toStore
+  const fromColor = fromInfo?.color ?? '#888888'
+  const toColor = toInfo?.color ?? '#888888'
+
   function handleSelectProduct(id: string, name: string) {
     setSelectedId(id)
     setSearch(name)
@@ -50,8 +58,23 @@ export function Transfer() {
     setShowDrop(false)
   }
 
-  function changeDirection(d: Direction) {
-    setDirection(d)
+  function changeFrom(id: StoreId) {
+    if (id === toStore) {
+      const other = storeOrder.find((s) => s !== id) ?? storeOrder[0]
+      setToStore(other)
+    }
+    setFromStore(id)
+    clearProduct()
+    setQty(1)
+    setMemo('')
+  }
+
+  function changeTo(id: StoreId) {
+    if (id === fromStore) {
+      const other = storeOrder.find((s) => s !== id) ?? storeOrder[0]
+      setFromStore(other)
+    }
+    setToStore(id)
     clearProduct()
     setQty(1)
     setMemo('')
@@ -76,10 +99,7 @@ export function Transfer() {
 
   const history = transfers.filter((t) => t.status !== '却下')
 
-  const fromLabel = fromStore === 'flag' ? 'flag' : 'Lien'
-  const toLabel = toStore === 'flag' ? 'flag' : 'Lien'
-  const fromColor = fromStore === 'flag' ? '#2B5FA7' : '#8A4AA6'
-  const toColor = toStore === 'flag' ? '#2B5FA7' : '#8A4AA6'
+  const selectCls = 'h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent w-full'
 
   return (
     <div className="flex flex-col h-full">
@@ -89,46 +109,61 @@ export function Transfer() {
         <SideNav />
         <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-6">
 
-          {/* Toast */}
           {toast && (
             <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-semibold pointer-events-none">
               ✓ {toast}
             </div>
           )}
 
-          {/* 方向選択 */}
-          <div className="grid grid-cols-2 gap-3 mb-5">
-            <button
-              onClick={() => changeDirection('flag-to-lien')}
-              className={`rounded-xl p-4 border-2 transition-all text-left active:scale-[0.98] ${
-                direction === 'flag-to-lien'
-                  ? 'border-accent bg-accent/5 shadow-sm'
-                  : 'border-border bg-surface'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-sm font-extrabold" style={{ color: '#2B5FA7' }}>flag</span>
-                <span className="text-muted text-base">→</span>
-                <span className="text-sm font-extrabold" style={{ color: '#8A4AA6' }}>Lien</span>
+          {/* 移動元 → 移動先 選択 */}
+          <div className="bg-surface rounded-xl border border-border p-4 mb-5">
+            <p className="text-xs font-semibold text-muted mb-3">移動方向</p>
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-muted mb-1.5 block">移動元</label>
+                <select
+                  value={fromStore}
+                  onChange={(e) => changeFrom(e.target.value as StoreId)}
+                  className={selectCls}
+                  style={{ color: fromColor, fontWeight: 700 }}
+                >
+                  {storeOrder.map((id) => (
+                    <option key={id} value={id} style={{ color: 'inherit', fontWeight: 'normal' }}>
+                      {storeInfo[id]?.name ?? id}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="text-xs font-semibold text-text">flag から Lien へ送る</p>
-            </button>
 
-            <button
-              onClick={() => changeDirection('lien-to-flag')}
-              className={`rounded-xl p-4 border-2 transition-all text-left active:scale-[0.98] ${
-                direction === 'lien-to-flag'
-                  ? 'border-accent bg-accent/5 shadow-sm'
-                  : 'border-border bg-surface'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-sm font-extrabold" style={{ color: '#8A4AA6' }}>Lien</span>
-                <span className="text-muted text-base">→</span>
-                <span className="text-sm font-extrabold" style={{ color: '#2B5FA7' }}>flag</span>
+              {/* 入れ替えボタン */}
+              <button
+                onClick={() => { const tmp = fromStore; changeFrom(toStore); changeTo(tmp) }}
+                className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg border border-border hover:bg-bg transition-colors text-muted text-lg mb-0.5"
+                title="入れ替え"
+              >
+                ⇄
+              </button>
+
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-muted mb-1.5 block">移動先</label>
+                <select
+                  value={toStore}
+                  onChange={(e) => changeTo(e.target.value as StoreId)}
+                  className={selectCls}
+                  style={{ color: toColor, fontWeight: 700 }}
+                >
+                  {storeOrder.map((id) => (
+                    <option key={id} value={id} style={{ color: 'inherit', fontWeight: 'normal' }}>
+                      {storeInfo[id]?.name ?? id}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="text-xs font-semibold text-text">Lien から flag へ送る</p>
-            </button>
+            </div>
+
+            {fromStore === toStore && (
+              <p className="text-xs text-danger mt-2">移動元と移動先が同じ店舗です</p>
+            )}
           </div>
 
           {/* 移動フォーム */}
@@ -142,14 +177,16 @@ export function Transfer() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-text">{selectedProduct.name}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <div className="flex items-center gap-1 bg-surface border border-border rounded-md px-2 py-1">
+                      <div className="flex items-center gap-1.5 bg-surface border border-border rounded-md px-2 py-1">
+                        <StoreDot store={fromStore} size="sm" />
                         <span className="text-xs font-bold" style={{ color: fromColor }}>{fromLabel}</span>
-                        <span className="text-xs text-text font-semibold ml-1">{getStock(selectedId, fromStore)} 個</span>
+                        <span className="text-xs text-text font-semibold ml-0.5">{getStock(selectedId, fromStore)} 個</span>
                       </div>
                       <span className="text-muted text-sm">→</span>
-                      <div className="flex items-center gap-1 bg-surface border border-border rounded-md px-2 py-1">
+                      <div className="flex items-center gap-1.5 bg-surface border border-border rounded-md px-2 py-1">
+                        <StoreDot store={toStore} size="sm" />
                         <span className="text-xs font-bold" style={{ color: toColor }}>{toLabel}</span>
-                        <span className="text-xs text-text font-semibold ml-1">{getStock(selectedId, toStore)} 個</span>
+                        <span className="text-xs text-text font-semibold ml-0.5">{getStock(selectedId, toStore)} 個</span>
                       </div>
                     </div>
                   </div>
@@ -230,7 +267,7 @@ export function Transfer() {
 
             {/* メモ */}
             <div>
-              <label className="text-xs font-semibold text-muted mb-1.5 block">メモ（任意）</label>
+              <label className="text-xs font-semibond text-muted mb-1.5 block">メモ（任意）</label>
               <input
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
@@ -244,9 +281,9 @@ export function Transfer() {
             {/* 実行ボタン */}
             <button
               onClick={handleTransfer}
-              disabled={!selectedId}
+              disabled={!selectedId || fromStore === toStore}
               className={`w-full h-12 rounded-lg text-sm font-bold transition-all ${
-                selectedId
+                selectedId && fromStore !== toStore
                   ? 'bg-accent text-white hover:opacity-90 active:scale-[0.98]'
                   : 'bg-border text-faint cursor-not-allowed'
               }`}
@@ -267,10 +304,12 @@ export function Transfer() {
               {history.map((tr) => {
                 const item = tr.items[0]
                 const p = item ? products.find((pr) => pr.id === item.productId) : null
-                const fColor = tr.fromStore === 'flag' ? '#2B5FA7' : '#8A4AA6'
-                const tColor = tr.toStore === 'flag' ? '#2B5FA7' : '#8A4AA6'
-                const fLabel = tr.fromStore === 'flag' ? 'flag' : 'Lien'
-                const tLabel = tr.toStore === 'flag' ? 'flag' : 'Lien'
+                const fInfo = storeInfo[tr.fromStore]
+                const tInfo = storeInfo[tr.toStore]
+                const fColor = fInfo?.color ?? '#888888'
+                const tColor = tInfo?.color ?? '#888888'
+                const fLabel = fInfo?.name ?? tr.fromStore
+                const tLabel = tInfo?.name ?? tr.toStore
                 return (
                   <div key={tr.id} className="bg-surface rounded-lg border border-border px-4 py-3 flex items-center gap-3">
                     <span className="text-xs text-faint w-14 flex-shrink-0">{tr.createdAt}</span>

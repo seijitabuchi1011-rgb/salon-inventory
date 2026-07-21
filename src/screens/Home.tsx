@@ -20,50 +20,34 @@ const TILES = [
 
 export function Home() {
   const navigate = useNavigate()
-  const { currentStore, products, stocks } = useAppStore()
+  const { currentStore, products, stocks, storeInfo, storeOrder } = useAppStore()
   const today = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
 
-  const storeLabel =
-    currentStore === 'flag' ? 'flag美容室' :
-    currentStore === 'lien' ? 'Lien美容室' : '全店'
+  const storeLabel = currentStore === 'all' ? '全店' : (storeInfo[currentStore]?.name ?? currentStore)
+
+  const checkStores = currentStore === 'all' ? storeOrder : [currentStore]
 
   // 在庫不足カウント
-  const lowStockCount = products.filter((p) => {
-    if (currentStore === 'flag' || currentStore === 'all') {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
-      if (s && s.active !== false && s.currentStock <= s.minStock) return true
-    }
-    if (currentStore === 'lien' || currentStore === 'all') {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
-      if (s && s.active !== false && s.currentStock <= s.minStock) return true
-    }
-    return false
-  }).length
+  const lowStockCount = products.filter((p) =>
+    checkStores.some((sid) => {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === sid)
+      return s && s.active !== false && s.currentStock <= s.minStock
+    })
+  ).length
 
   // 緊急（在庫0）カウント
-  const urgentCount = products.filter((p) => {
-    if (currentStore === 'flag' || currentStore === 'all') {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
-      if (s && s.active !== false && s.currentStock === 0) return true
-    }
-    if (currentStore === 'lien' || currentStore === 'all') {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
-      if (s && s.active !== false && s.currentStock === 0) return true
-    }
-    return false
-  }).length
+  const urgentCount = products.filter((p) =>
+    checkStores.some((sid) => {
+      const s = stocks.find((s) => s.productId === p.id && s.storeId === sid)
+      return s && s.active !== false && s.currentStock === 0
+    })
+  ).length
 
   // 取扱商品数
   const activeProductCount = products.filter((p) => {
-    if (currentStore === 'flag') {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
-      return s?.active !== false
-    }
-    if (currentStore === 'lien') {
-      const s = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
-      return s?.active !== false
-    }
-    return true
+    if (currentStore === 'all') return true
+    const s = stocks.find((s) => s.productId === p.id && s.storeId === currentStore)
+    return s?.active !== false
   }).length
 
   const kpiCards = [

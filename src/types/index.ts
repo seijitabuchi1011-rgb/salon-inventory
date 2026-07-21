@@ -1,5 +1,5 @@
-export type StoreId = 'flag' | 'lien'
-export type StoreFilter = 'all' | StoreId
+export type StoreId = string
+export type StoreFilter = string
 
 export interface Product {
   id: string

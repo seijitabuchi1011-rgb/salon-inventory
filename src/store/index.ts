@@ -6,24 +6,24 @@ export interface StoreInfo {
   name: string
   phone: string
   address: string
+  color: string
 }
 
 export interface AppSettings {
-  flagMinStock: number
-  lienMinStock: number
+  minStockByStore: Record<string, number>
   notifyLowStock: boolean
-  notifyLowStockFlag: boolean
-  notifyLowStockLien: boolean
+  notifyLowStockByStore: Record<string, boolean>
   notifyOrder: boolean
   notifyTransfer: boolean
   notifyStocktake: boolean
   pin: string
 }
 
-const DEFAULT_STORE_INFO: { flag: StoreInfo; lien: StoreInfo } = {
-  flag: { name: 'flag 美容室', phone: '03-1234-5678', address: '東京都渋谷区...' },
-  lien: { name: 'Lien 美容室', phone: '03-8765-4321', address: '東京都新宿区...' },
+const DEFAULT_STORE_INFO: Record<string, StoreInfo> = {
+  flag: { name: 'flag 美容室', phone: '03-1234-5678', address: '東京都渋谷区...', color: '#2B5FA7' },
+  lien: { name: 'Lien 美容室', phone: '03-8765-4321', address: '東京都新宿区...', color: '#8A4AA6' },
 }
+const DEFAULT_STORE_ORDER: string[] = ['flag', 'lien']
 
 const DEFAULT_CATEGORIES = [
   'カラー剤', 'ブリーチ剤', 'カラーオキシ', 'パーマ剤', 'プレックス剤',
@@ -42,11 +42,9 @@ const DEFAULT_MAKERS = [
 ]
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
-  flagMinStock: 5,
-  lienMinStock: 3,
+  minStockByStore: { flag: 5, lien: 3 },
   notifyLowStock: true,
-  notifyLowStockFlag: true,
-  notifyLowStockLien: true,
+  notifyLowStockByStore: { flag: true, lien: true },
   notifyOrder: true,
   notifyTransfer: false,
   notifyStocktake: true,
@@ -61,7 +59,8 @@ export interface FirestoreData {
   transfers: Transfer[]
   staffPurchases: StaffPurchase[]
   staffMembers: string[]
-  storeInfo: { flag: StoreInfo; lien: StoreInfo }
+  storeInfo: Record<string, StoreInfo>
+  storeOrder: string[]
   appSettings: AppSettings
   stocktakeSnapshots: StocktakeSnapshot[]
   categories: string[]
@@ -73,8 +72,11 @@ export interface FirestoreData {
 interface AppState {
   currentStore: StoreFilter
   setCurrentStore: (store: StoreFilter) => void
-  storeInfo: { flag: StoreInfo; lien: StoreInfo }
-  setStoreInfo: (storeId: 'flag' | 'lien', info: StoreInfo) => void
+  storeInfo: Record<string, StoreInfo>
+  storeOrder: string[]
+  setStoreInfo: (storeId: string, info: StoreInfo) => void
+  addStore: (name: string, color: string) => void
+  removeStore: (id: string) => void
   appSettings: AppSettings
   setAppSettings: (s: Partial<AppSettings>) => void
   products: Product[]
@@ -912,8 +914,34 @@ export const useAppStore = create<AppState>()(
       currentStore: 'all',
       setCurrentStore: (store) => set({ currentStore: store }),
       storeInfo: DEFAULT_STORE_INFO,
+      storeOrder: DEFAULT_STORE_ORDER,
       setStoreInfo: (storeId, info) =>
         set((state) => ({ storeInfo: { ...state.storeInfo, [storeId]: info } })),
+      addStore: (name, color) => {
+        const id = `store_${Date.now()}`
+        set((state) => ({
+          storeInfo: { ...state.storeInfo, [id]: { name, phone: '', address: '', color } },
+          storeOrder: [...state.storeOrder, id],
+          appSettings: {
+            ...state.appSettings,
+            minStockByStore: { ...state.appSettings.minStockByStore, [id]: 3 },
+            notifyLowStockByStore: { ...state.appSettings.notifyLowStockByStore, [id]: true },
+          },
+        }))
+      },
+      removeStore: (id) => {
+        if (id === 'flag' || id === 'lien') return
+        set((state) => {
+          const { [id]: _1, ...restInfo } = state.storeInfo
+          const { [id]: _2, ...restMin } = state.appSettings.minStockByStore
+          const { [id]: _3, ...restNotify } = state.appSettings.notifyLowStockByStore
+          return {
+            storeInfo: restInfo,
+            storeOrder: state.storeOrder.filter((s) => s !== id),
+            appSettings: { ...state.appSettings, minStockByStore: restMin, notifyLowStockByStore: restNotify },
+          }
+        })
+      },
       appSettings: DEFAULT_APP_SETTINGS,
       setAppSettings: (s) =>
         set((state) => ({ appSettings: { ...state.appSettings, ...s } })),
@@ -1149,6 +1177,7 @@ export const useAppStore = create<AppState>()(
           staffPurchases: data.staffPurchases ?? state.staffPurchases,
           staffMembers: data.staffMembers ?? state.staffMembers,
           storeInfo: data.storeInfo ?? state.storeInfo,
+          storeOrder: data.storeOrder ?? state.storeOrder,
           appSettings: data.appSettings ?? state.appSettings,
           stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
           categories: data.categories ?? state.categories,
@@ -1159,7 +1188,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'salon-inventory-store',
-      version: 8,
+      version: 9,
       partialize: (state) => ({
         products: state.products,
         stocks: state.stocks,
@@ -1168,6 +1197,7 @@ export const useAppStore = create<AppState>()(
         staffPurchases: state.staffPurchases,
         staffMembers: state.staffMembers,
         storeInfo: state.storeInfo,
+        storeOrder: state.storeOrder,
         appSettings: state.appSettings,
         stocktakeSnapshots: state.stocktakeSnapshots,
         categories: state.categories,
@@ -1176,40 +1206,67 @@ export const useAppStore = create<AppState>()(
         dealerReps: state.dealerReps,
       }),
       migrate: (persistedState, fromVersion) => {
-        const saved = persistedState as {
-          products?: Product[]
-          stocks?: StoreStock[]
-          transactions?: Transaction[]
-          transfers?: Transfer[]
-          staffPurchases?: StaffPurchase[]
-          staffMembers?: string[]
-          storeInfo?: { flag: StoreInfo; lien: StoreInfo }
-          appSettings?: AppSettings
-          stocktakeSnapshots?: StocktakeSnapshot[]
-          categories?: string[]
-          makers?: string[]
-          dealers?: string[]
-          dealerReps?: string[]
+        const saved = persistedState as Record<string, unknown>
+        const products = (saved.products as Product[] | undefined) ?? []
+        const stocks = (saved.stocks as StoreStock[] | undefined) ?? []
+        const transactions = (saved.transactions as Transaction[] | undefined) ?? []
+        const transfers = (saved.transfers as Transfer[] | undefined) ?? []
+        const staffPurchases = (saved.staffPurchases as StaffPurchase[] | undefined) ?? []
+        const staffMembers = (saved.staffMembers as string[] | undefined) ?? []
+        const stocktakeSnapshots = (saved.stocktakeSnapshots as StocktakeSnapshot[] | undefined) ?? []
+        const categories = (saved.categories as string[] | undefined) ?? DEFAULT_CATEGORIES
+        const makers = (saved.makers as string[] | undefined) ?? DEFAULT_MAKERS
+        const dealers = (saved.dealers as string[] | undefined) ?? []
+        const dealerReps = (saved.dealerReps as string[] | undefined) ?? []
+
+        // storeInfo: add color field if missing, support Record<string, StoreInfo> format
+        const savedInfo = (saved.storeInfo ?? {}) as Record<string, Record<string, unknown>>
+        const storeInfo: Record<string, StoreInfo> = {}
+        const ensureStore = (id: string, def: StoreInfo, defaultColor: string) => {
+          const raw = savedInfo[id]
+          storeInfo[id] = {
+            name: (raw?.name as string) ?? def.name,
+            phone: (raw?.phone as string) ?? def.phone,
+            address: (raw?.address as string) ?? def.address,
+            color: (raw?.color as string) ?? defaultColor,
+          }
         }
-        const products = saved.products ?? []
-        const stocks = saved.stocks ?? []
-        const transactions = saved.transactions ?? []
-        const transfers = saved.transfers ?? []
-        const staffPurchases = saved.staffPurchases ?? []
-        const staffMembers = saved.staffMembers ?? []
-        const storeInfo = saved.storeInfo ?? DEFAULT_STORE_INFO
-        const appSettings = { ...DEFAULT_APP_SETTINGS, ...(saved.appSettings ?? {}) }
-        const stocktakeSnapshots = saved.stocktakeSnapshots ?? []
-        const categories = saved.categories ?? DEFAULT_CATEGORIES
-        const makers = saved.makers ?? DEFAULT_MAKERS
-        const dealers = saved.dealers ?? []
-        const dealerReps = saved.dealerReps ?? []
+        ensureStore('flag', DEFAULT_STORE_INFO.flag, '#2B5FA7')
+        ensureStore('lien', DEFAULT_STORE_INFO.lien, '#8A4AA6')
+        Object.entries(savedInfo).forEach(([id, raw]) => {
+          if (id === 'flag' || id === 'lien') return
+          storeInfo[id] = {
+            name: (raw?.name as string) ?? id,
+            phone: (raw?.phone as string) ?? '',
+            address: (raw?.address as string) ?? '',
+            color: (raw?.color as string) ?? '#888888',
+          }
+        })
+        const storeOrder = (saved.storeOrder as string[] | undefined) ?? Object.keys(storeInfo)
+
+        // AppSettings: migrate flagMinStock/lienMinStock → minStockByStore etc.
+        const old = (saved.appSettings ?? {}) as Record<string, unknown>
+        const appSettings: AppSettings = {
+          minStockByStore: (old.minStockByStore as Record<string, number> | undefined) ?? {
+            flag: (old.flagMinStock as number | undefined) ?? 5,
+            lien: (old.lienMinStock as number | undefined) ?? 3,
+          },
+          notifyLowStock: (old.notifyLowStock as boolean | undefined) ?? true,
+          notifyLowStockByStore: (old.notifyLowStockByStore as Record<string, boolean> | undefined) ?? {
+            flag: (old.notifyLowStockFlag as boolean | undefined) ?? true,
+            lien: (old.notifyLowStockLien as boolean | undefined) ?? true,
+          },
+          notifyOrder: (old.notifyOrder as boolean | undefined) ?? true,
+          notifyTransfer: (old.notifyTransfer as boolean | undefined) ?? false,
+          notifyStocktake: (old.notifyStocktake as boolean | undefined) ?? true,
+          pin: (old.pin as string | undefined) ?? '',
+        }
 
         if (fromVersion < 3 && products.length === 0) {
-          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, appSettings, stocktakeSnapshots: [], categories, makers, dealers, dealerReps }
+          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, storeOrder, appSettings, stocktakeSnapshots: [], categories, makers, dealers, dealerReps }
         }
 
-        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
+        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, storeOrder, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
       },
     }
   )

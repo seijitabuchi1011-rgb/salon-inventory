@@ -299,7 +299,7 @@ export function Products() {
 
           {/* テーブル */}
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="w-full min-w-[800px] text-sm border-collapse">
               <thead className="bg-bg border-b border-border sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-3 w-10 text-center">

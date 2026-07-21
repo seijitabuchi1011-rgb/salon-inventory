@@ -19,7 +19,7 @@ const CATEGORIES = [
 type ModalState = {
   productId: string
   productName: string
-  storeId: 'flag' | 'lien'
+  storeId: string
   currentStock: number
   minStock: number
   active: boolean
@@ -27,9 +27,8 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings } = useAppStore()
-  const showFlag = currentStore === 'all' || currentStore === 'flag'
-  const showLien = currentStore === 'all' || currentStore === 'lien'
+  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder } = useAppStore()
+  const visibleStores = currentStore === 'all' ? storeOrder : storeOrder.filter((id) => id === currentStore)
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
   const setTab = fixedMode ? () => {} : setTabState
@@ -39,30 +38,30 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
 
   const isReceive = tab === 'receive'
 
-  function getStock(productId: string, storeId: 'flag' | 'lien') {
+  function getStock(productId: string, storeId: string) {
     return stocks.find((s) => s.productId === productId && s.storeId === storeId)
   }
 
   // ワンタッチで ±1
-  function quickUpdate(productId: string, storeId: 'flag' | 'lien', delta: number) {
+  function quickUpdate(productId: string, storeId: string, delta: number) {
     const s = getStock(productId, storeId)
     const next = Math.max(0, (s?.currentStock ?? 0) + delta)
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {
       addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
     }
-    const notifyThisStore = storeId === 'flag' ? (appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock) : (appSettings.notifyLowStockLien ?? appSettings.notifyLowStock)
+    const notifyThisStore = appSettings.notifyLowStockByStore?.[storeId] ?? appSettings.notifyLowStock
     if (delta < 0 && notifyThisStore && next <= (s?.minStock ?? 3)) {
       const p = products.find((pr) => pr.id === productId)
       sendNotification(
         '在庫不足アラート',
-        `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）`
+        `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeInfo[storeId]?.name ?? storeId}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）`
       )
     }
   }
 
   // モーダルで任意数を入力
-  function openModal(productId: string, productName: string, storeId: 'flag' | 'lien') {
+  function openModal(productId: string, productName: string, storeId: string) {
     const s = getStock(productId, storeId)
     setModal({
       productId,
@@ -82,11 +81,11 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
       : Math.max(0, modal.currentStock - modal.quantity)
     upsertStock({ productId: modal.productId, storeId: modal.storeId, currentStock: newStock, minStock: modal.minStock, active: modal.active })
     addTransaction({ type: isReceive ? 'receive' : 'dispense', productId: modal.productId, storeId: modal.storeId, quantity: modal.quantity })
-    const notifyThisStore = modal.storeId === 'flag' ? (appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock) : (appSettings.notifyLowStockLien ?? appSettings.notifyLowStock)
+    const notifyThisStore = appSettings.notifyLowStockByStore?.[modal.storeId] ?? appSettings.notifyLowStock
     if (!isReceive && notifyThisStore && newStock <= modal.minStock) {
       sendNotification(
         '在庫不足アラート',
-        `${modal.productName} の在庫が下限を下回りました。\n店舗: ${modal.storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}\n現在庫: ${newStock} 個（下限: ${modal.minStock} 個）`
+        `${modal.productName} の在庫が下限を下回りました。\n店舗: ${storeInfo[modal.storeId]?.name ?? modal.storeId}\n現在庫: ${newStock} 個（下限: ${modal.minStock} 個）`
       )
     }
     setModal(null)
@@ -114,7 +113,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   }: {
     productId: string
     productName: string
-    storeId: 'flag' | 'lien'
+    storeId: string
   }) {
     const s = getStock(productId, storeId)
     const active = s?.active ?? true
@@ -256,35 +255,25 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
 
           {/* テーブル */}
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="w-full min-w-[540px] text-sm border-collapse">
               <thead className="bg-bg border-b border-border sticky top-0 z-10">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
-                  {showFlag && (
-                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#2B5FA7' }}>flag</th>
-                  )}
-                  {showFlag && (
-                    <th className="w-36 px-2 py-3 text-center">
-                      <div className="flex items-center gap-1 justify-center">
-                        <span className="text-xs text-danger font-semibold">−</span>
-                        <span className="text-xs text-muted font-semibold">/</span>
-                        <span className="text-xs text-ok font-semibold">＋</span>
-                      </div>
-                    </th>
-                  )}
-                  {showLien && (
-                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#8A4AA6' }}>Lien</th>
-                  )}
-                  {showLien && (
-                    <th className="w-36 px-2 py-3 text-center">
-                      <div className="flex items-center gap-1 justify-center">
-                        <span className="text-xs text-danger font-semibold">−</span>
-                        <span className="text-xs text-muted font-semibold">/</span>
-                        <span className="text-xs text-ok font-semibold">＋</span>
-                      </div>
-                    </th>
-                  )}
+                  {visibleStores.map((sid) => (
+                    <>
+                      <th key={sid + '-stock'} className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: storeInfo[sid]?.color ?? '#888888' }}>
+                        {storeInfo[sid]?.name ?? sid}
+                      </th>
+                      <th key={sid + '-btn'} className="w-36 px-2 py-3 text-center">
+                        <div className="flex items-center gap-1 justify-center">
+                          <span className="text-xs text-danger font-semibold">−</span>
+                          <span className="text-xs text-muted font-semibold">/</span>
+                          <span className="text-xs text-ok font-semibold">＋</span>
+                        </div>
+                      </th>
+                    </>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -292,8 +281,9 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                   <tr key={p.id} className="border-b border-border hover:bg-bg transition-colors">
                     <td className="px-4 py-2 font-semibold text-text">{p.name}</td>
                     <td className="px-4 py-2 text-xs text-muted">{p.category}</td>
-                    {showFlag && <StoreCell productId={p.id} productName={p.name} storeId="flag" />}
-                    {showLien && <StoreCell productId={p.id} productName={p.name} storeId="lien" />}
+                    {visibleStores.map((sid) => (
+                      <StoreCell key={sid} productId={p.id} productName={p.name} storeId={sid} />
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -312,9 +302,9 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                 <StoreDot store={modal.storeId} />
                 <span
                   className="text-xs font-bold"
-                  style={{ color: modal.storeId === 'flag' ? '#2B5FA7' : '#8A4AA6' }}
+                  style={{ color: storeInfo[modal.storeId]?.color ?? '#888888' }}
                 >
-                  {modal.storeId === 'flag' ? 'flag 美容室' : 'Lien 美容室'}
+                  {storeInfo[modal.storeId]?.name ?? modal.storeId}
                 </span>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ml-1 ${
                   isReceive ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger'

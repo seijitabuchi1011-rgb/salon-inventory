@@ -82,24 +82,25 @@ export function LowStock() {
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
         <main className="flex-1 flex flex-col overflow-hidden bg-bg">
-          <div className="px-6 pt-5 pb-3 bg-surface border-b border-border">
-            <div className="flex items-center gap-3 mb-4">
-              <div>
+          <div className="px-4 md:px-6 pt-5 pb-3 bg-surface border-b border-border">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <div className="flex-1 min-w-0">
                 <p className="text-2xs text-faint">
                   {storeLabel} · 下限を下回っている商品
                 </p>
-                <p className="text-3xl font-bold text-text">
+                <p className="text-2xl md:text-3xl font-bold text-text">
                   {lowItems.length} 商品
                   {urgentCount > 0 && (
                     <span className="text-sm text-danger font-semibold ml-2">· 緊急 {urgentCount}件</span>
                   )}
                 </p>
               </div>
-              <div className="flex-1" />
-              <Btn variant="ghost" size="sm" onClick={exportCsv}>CSVエクスポート</Btn>
-              <Btn variant="primary" size="sm" disabled={selected.size === 0}>
-                ↧ 選択中 {selected.size}件をまとめて発注
-              </Btn>
+              <div className="flex gap-2 flex-shrink-0">
+                <Btn variant="ghost" size="sm" onClick={exportCsv}>CSV</Btn>
+                <Btn variant="primary" size="sm" disabled={selected.size === 0}>
+                  ↧ {selected.size}件まとめて発注
+                </Btn>
+              </div>
             </div>
             <div className="flex gap-2 overflow-x-auto">
               {(['すべて', '緊急のみ', 'flag店', 'Lien店', '両店とも不足'] as Filter[]).map((f) => (
@@ -124,60 +125,101 @@ export function LowStock() {
                 <p className="text-xs text-faint">{storeLabel}の在庫はすべて下限を上回っています</p>
               </div>
             ) : (
-              <table className="w-full text-sm border-collapse">
-                <thead className="bg-bg border-b border-border sticky top-0 z-10">
-                  <tr>
-                    <th className="px-5 py-3 w-10"></th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#1B5EB8' }}>flag在庫</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#1B5EB8' }}>flag下限</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#7B2FA8' }}>Lien在庫</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#7B2FA8' }}>Lien下限</th>
-                    <th className="px-4 py-3 w-20"></th>
-                  </tr>
-                </thead>
-                <tbody>
+              <>
+                {/* モバイル: カードリスト */}
+                <div className="md:hidden divide-y divide-border">
                   {filtered.map((p) => {
                     const checked = selected.has(p.id)
                     return (
-                      <tr
+                      <div
                         key={p.id}
-                        className={`border-b border-border transition-colors ${checked ? 'bg-accent-soft' : 'hover:bg-bg'}`}
+                        className={`px-4 py-3 flex items-start gap-3 ${checked ? 'bg-accent-soft' : ''}`}
                       >
-                        <td className="px-5 py-3">
-                          <button
-                            onClick={() => toggle(p.id)}
-                            className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors ${
-                              checked ? 'bg-text border-text text-white' : 'border-border-strong'
-                            }`}
-                          >
-                            {checked && <span className="text-xs leading-none">✓</span>}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-text">{p.name}</span>
+                        <button
+                          onClick={() => toggle(p.id)}
+                          className={`w-5 h-5 mt-0.5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
+                            checked ? 'bg-text border-text text-white' : 'border-border-strong'
+                          }`}
+                        >
+                          {checked && <span className="text-xs leading-none">✓</span>}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-text text-sm truncate">{p.name}</span>
                             {p.urgent && <Badge variant="danger">緊急</Badge>}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted">{p.category}</td>
-                        <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.flagLow ? 'text-danger' : 'text-text'}`}>
-                          {p.flag}
-                        </td>
-                        <td className="px-4 py-3 text-right text-muted tabular-nums">{p.flagMin}</td>
-                        <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.lienLow ? 'text-danger' : 'text-text'}`}>
-                          {p.lien}
-                        </td>
-                        <td className="px-4 py-3 text-right text-muted tabular-nums">{p.lienMin}</td>
-                        <td className="px-4 py-3 text-center">
-                          <Btn variant="ghost" size="sm">発注</Btn>
-                        </td>
-                      </tr>
+                          <p className="text-xs text-muted mb-2">{p.category}</p>
+                          <div className="flex gap-3 flex-wrap">
+                            <span className="text-xs">
+                              <span className="font-semibold text-muted mr-1">flag</span>
+                              <span className={`font-bold tabular-nums ${p.flagLow ? 'text-danger' : 'text-text'}`}>{p.flag}</span>
+                              <span className="text-faint">/{p.flagMin}</span>
+                            </span>
+                            <span className="text-xs">
+                              <span className="font-semibold text-muted mr-1">Lien</span>
+                              <span className={`font-bold tabular-nums ${p.lienLow ? 'text-danger' : 'text-text'}`}>{p.lien}</span>
+                              <span className="text-faint">/{p.lienMin}</span>
+                            </span>
+                          </div>
+                        </div>
+                        <Btn variant="ghost" size="sm">発注</Btn>
+                      </div>
                     )
                   })}
-                </tbody>
-              </table>
+                </div>
+
+                {/* デスクトップ: テーブル */}
+                <table className="hidden md:table w-full text-sm border-collapse">
+                  <thead className="bg-bg border-b border-border sticky top-0 z-10">
+                    <tr>
+                      <th className="px-5 py-3 w-10"></th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#1B5EB8' }}>flag在庫</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#1B5EB8' }}>flag下限</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#7B2FA8' }}>Lien在庫</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#7B2FA8' }}>Lien下限</th>
+                      <th className="px-4 py-3 w-20"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p) => {
+                      const checked = selected.has(p.id)
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`border-b border-border transition-colors ${checked ? 'bg-accent-soft' : 'hover:bg-bg'}`}
+                        >
+                          <td className="px-5 py-3">
+                            <button
+                              onClick={() => toggle(p.id)}
+                              className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors ${
+                                checked ? 'bg-text border-text text-white' : 'border-border-strong'
+                              }`}
+                            >
+                              {checked && <span className="text-xs leading-none">✓</span>}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-text">{p.name}</span>
+                              {p.urgent && <Badge variant="danger">緊急</Badge>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted">{p.category}</td>
+                          <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.flagLow ? 'text-danger' : 'text-text'}`}>{p.flag}</td>
+                          <td className="px-4 py-3 text-right text-muted tabular-nums">{p.flagMin}</td>
+                          <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.lienLow ? 'text-danger' : 'text-text'}`}>{p.lien}</td>
+                          <td className="px-4 py-3 text-right text-muted tabular-nums">{p.lienMin}</td>
+                          <td className="px-4 py-3 text-center">
+                            <Btn variant="ghost" size="sm">発注</Btn>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </>
             )}
           </div>
         </main>

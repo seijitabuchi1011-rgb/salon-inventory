@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Card } from '../components/Card'
@@ -7,6 +7,8 @@ import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
 import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
+
+const PRESET_COLORS = ['#2B5FA7', '#8A4AA6', '#2D9E6B', '#E67E22', '#E74C3C', '#1ABC9C', '#E91E8C', '#F39C12']
 
 type Section = '店舗設定' | 'スタッフ管理' | '在庫アラート' | '通知設定' | 'マスタ管理' | 'セキュリティ' | 'データ管理'
 const SECTIONS: Section[] = ['店舗設定', 'スタッフ管理', '在庫アラート', '通知設定', 'マスタ管理', 'セキュリティ', 'データ管理']
@@ -105,35 +107,81 @@ function downloadCSV(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url)
 }
 
+function parseCSVRow(line: string): string[] {
+  const result: string[] = []
+  let inQuotes = false
+  let current = ''
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++ }
+      else { inQuotes = !inQuotes }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current); current = ''
+    } else { current += ch }
+  }
+  result.push(current)
+  return result
+}
+
 export function Settings() {
   const {
     products, stocks, transactions, staffPurchases,
-    storeInfo, setStoreInfo,
+    storeInfo, storeOrder, setStoreInfo, addStore, removeStore,
     appSettings, setAppSettings,
     staffMembers, addStaffMember, removeStaffMember,
     categories, addCategory, removeCategory,
     makers, addMaker, removeMaker,
     dealers, addDealer, removeDealer,
     dealerReps, addDealerRep, removeDealerRep,
+    upsertProduct,
   } = useAppStore()
 
   const [section, setSection] = useState<Section>('店舗設定')
   const [toast, setToast] = useState('')
   const [newStaffName, setNewStaffName] = useState('')
 
-  // 店舗設定ローカル状態
-  const [flag, setFlag] = useState<StoreInfo>({ ...storeInfo.flag })
-  const [lien, setLien] = useState<StoreInfo>({ ...storeInfo.lien })
+  // 店舗設定ローカル状態（動的）
+  const [storeEdits, setStoreEdits] = useState<Record<string, StoreInfo>>(() =>
+    Object.fromEntries(storeOrder.map((id) => [id, { ...storeInfo[id] }]))
+  )
+
+  // storeOrderに新しい店舗が追加されたらstoreEditsにマージ
+  useEffect(() => {
+    setStoreEdits((prev) => {
+      const merged: Record<string, StoreInfo> = {}
+      storeOrder.forEach((id) => {
+        merged[id] = prev[id] ?? { ...storeInfo[id] }
+      })
+      return merged
+    })
+  }, [storeOrder]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 新規店舗追加フォーム
+  const [showAddStore, setShowAddStore] = useState(false)
+  const [newStoreName, setNewStoreName] = useState('')
+  const [newStoreColor, setNewStoreColor] = useState(PRESET_COLORS[2])
 
   // 在庫アラートローカル状態
-  const [flagMin, setFlagMin] = useState(appSettings.flagMinStock)
-  const [lienMin, setLienMin] = useState(appSettings.lienMinStock)
+  const [minStockEdits, setMinStockEdits] = useState<Record<string, number>>(
+    () => ({ ...appSettings.minStockByStore })
+  )
+
+  useEffect(() => {
+    setMinStockEdits((prev) => {
+      const merged = { ...prev }
+      storeOrder.forEach((id) => {
+        if (!(id in merged)) merged[id] = appSettings.minStockByStore[id] ?? 3
+      })
+      return merged
+    })
+  }, [storeOrder]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // セキュリティ — PIN設定状態
   type PinStep = 'menu' | 'set-new' | 'set-confirm' | 'change-current' | 'change-new' | 'change-confirm' | 'delete-confirm'
   const [pinStep, setPinStep] = useState<PinStep>('menu')
   const [pinInput, setPinInput] = useState('')
-  const [pinFirst, setPinFirst] = useState('')  // 新規PINの1回目入力を一時保持
+  const [pinFirst, setPinFirst] = useState('')
 
   function pinPress(key: string) {
     if (key === '⌫') { setPinInput((d) => d.slice(0, -1)); return }
@@ -142,7 +190,6 @@ export function Settings() {
     setPinInput(next)
     if (next.length < 4) return
 
-    // 4桁揃ったときの処理
     setTimeout(() => {
       if (pinStep === 'set-new') {
         setPinFirst(next); setPinInput(''); setPinStep('set-confirm')
@@ -191,38 +238,105 @@ export function Settings() {
   const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫']
 
   // 通知設定ローカル状態
-  const [notifyLowStockFlag, setNotifyLowStockFlag] = useState(appSettings.notifyLowStockFlag ?? appSettings.notifyLowStock)
-  const [notifyLowStockLien, setNotifyLowStockLien] = useState(appSettings.notifyLowStockLien ?? appSettings.notifyLowStock)
+  const [notifyByStore, setNotifyByStore] = useState<Record<string, boolean>>(
+    () => ({ ...appSettings.notifyLowStockByStore })
+  )
+
+  useEffect(() => {
+    setNotifyByStore((prev) => {
+      const merged = { ...prev }
+      storeOrder.forEach((id) => {
+        if (!(id in merged)) merged[id] = true
+      })
+      return merged
+    })
+  }, [storeOrder]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [notifyOrder, setNotifyOrder] = useState(appSettings.notifyOrder)
   const [notifyTransfer, setNotifyTransfer] = useState(appSettings.notifyTransfer)
   const [notifyStocktake, setNotifyStocktake] = useState(appSettings.notifyStocktake)
 
+  // CSVインポート
+  const importRef = useRef<HTMLInputElement>(null)
+
   function showToast(msg: string) {
     setToast(msg)
-    setTimeout(() => setToast(''), 2000)
+    setTimeout(() => setToast(''), 2500)
   }
 
   function saveStoreInfo() {
-    setStoreInfo('flag', flag)
-    setStoreInfo('lien', lien)
+    storeOrder.forEach((id) => {
+      if (storeEdits[id]) setStoreInfo(id, storeEdits[id])
+    })
     showToast('店舗設定を保存しました')
   }
 
   function saveAlertSettings() {
-    setAppSettings({ flagMinStock: flagMin, lienMinStock: lienMin })
+    setAppSettings({ minStockByStore: minStockEdits })
     showToast('在庫アラート設定を保存しました')
   }
 
   function saveNotifySettings() {
     setAppSettings({
-      notifyLowStockFlag,
-      notifyLowStockLien,
-      notifyLowStock: notifyLowStockFlag || notifyLowStockLien,
+      notifyLowStockByStore: notifyByStore,
+      notifyLowStock: Object.values(notifyByStore).some(Boolean),
       notifyOrder,
       notifyTransfer,
       notifyStocktake,
     })
     showToast('通知設定を保存しました')
+  }
+
+  function handleAddStore() {
+    if (!newStoreName.trim()) return
+    addStore(newStoreName.trim(), newStoreColor)
+    showToast(`「${newStoreName.trim()}」を追加しました`)
+    setNewStoreName('')
+    setNewStoreColor(PRESET_COLORS[2])
+    setShowAddStore(false)
+  }
+
+  function handleRemoveStore(id: string) {
+    const name = storeInfo[id]?.name ?? id
+    if (!window.confirm(`「${name}」を削除しますか？\n※この店舗に関連する在庫データは残ります。`)) return
+    removeStore(id)
+    setStoreEdits((prev) => {
+      const { [id]: _, ...rest } = prev
+      return rest
+    })
+    showToast('店舗を削除しました')
+  }
+
+  function importProducts(file: File) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = ((e.target?.result as string) ?? '').replace(/^﻿/, '')
+      const lines = text.split(/\r?\n/).filter(Boolean)
+      if (lines.length < 2) { showToast('データがありません'); return }
+      let imported = 0, skipped = 0
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVRow(lines[i])
+        const id = cols[0]?.trim()
+        const name = cols[1]?.trim()
+        if (!id || !name) { skipped++; continue }
+        const taxRaw = cols[7]?.trim() ?? ''
+        const taxRate: 8 | 10 = taxRaw.startsWith('8') ? 8 : 10
+        upsertProduct({
+          id, name,
+          category: cols[2]?.trim() ?? '',
+          maker: cols[3]?.trim() ?? '',
+          barcode: cols[4]?.trim() ?? '',
+          purchasePrice: Number(cols[5]?.replace(/[^0-9]/g, '') || 0),
+          sellPrice: Number(cols[6]?.replace(/[^0-9]/g, '') || 0),
+          taxRate,
+          memo: cols[8]?.trim() || undefined,
+        })
+        imported++
+      }
+      showToast(`${imported}件インポートしました${skipped > 0 ? `（${skipped}件スキップ）` : ''}`)
+    }
+    reader.readAsText(file, 'utf-8')
+    if (importRef.current) importRef.current.value = ''
   }
 
   function exportProducts() {
@@ -238,9 +352,10 @@ export function Settings() {
     const header = ['商品ID', '商品名', 'カテゴリ', '店舗', '現在庫', '下限', '取扱']
     const rows = stocks.map((s) => {
       const p = products.find((pr) => pr.id === s.productId)
+      const storeName = storeInfo[s.storeId]?.name ?? s.storeId
       return [
         s.productId, p?.name ?? '', p?.category ?? '',
-        s.storeId === 'flag' ? 'flag美容室' : 'Lien美容室',
+        storeName,
         String(s.currentStock), String(s.minStock), s.active ? '○' : '×',
       ]
     })
@@ -257,7 +372,7 @@ export function Settings() {
         new Date(t.timestamp).toLocaleDateString('ja-JP'),
         typeLabel,
         t.productId, p?.name ?? '',
-        t.storeId === 'flag' ? 'flag美容室' : 'Lien美容室',
+        storeInfo[t.storeId]?.name ?? t.storeId,
         String(t.quantity),
       ]
     })
@@ -275,11 +390,13 @@ export function Settings() {
       return [
         sp.date, displayName, String(priceIncTax), String(sp.taxRate) + '%',
         String(sp.quantity), sp.purchasedBy, sp.recordedBy,
-        sp.storeId === 'flag' ? 'flag美容室' : 'Lien美容室',
+        storeInfo[sp.storeId]?.name ?? sp.storeId,
       ]
     })
     downloadCSV(`スタッフ購入履歴_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows])
   }
+
+  const inputCls = 'w-36 md:w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text'
 
   return (
     <div className="flex flex-col h-full">
@@ -307,67 +424,121 @@ export function Settings() {
           </div>
 
           {/* コンテンツ */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
             <div className="max-w-xl mx-auto flex flex-col gap-5">
 
               {/* 店舗設定 */}
               {section === '店舗設定' && (
                 <>
                   <h2 className="text-lg font-bold">店舗設定</h2>
-                  <Card>
-                    <div className="flex items-center gap-2 mb-4">
-                      <StoreDot store="flag" />
-                      <span className="text-sm font-bold text-flag">flag 美容室</span>
-                    </div>
-                    <Row label="店舗名">
-                      <input
-                        value={flag.name}
-                        onChange={(e) => setFlag({ ...flag, name: e.target.value })}
-                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
-                      />
-                    </Row>
-                    <Row label="電話番号">
-                      <input
-                        value={flag.phone}
-                        onChange={(e) => setFlag({ ...flag, phone: e.target.value })}
-                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
-                      />
-                    </Row>
-                    <Row label="住所">
-                      <input
-                        value={flag.address}
-                        onChange={(e) => setFlag({ ...flag, address: e.target.value })}
-                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
-                      />
-                    </Row>
-                  </Card>
-                  <Card>
-                    <div className="flex items-center gap-2 mb-4">
-                      <StoreDot store="lien" />
-                      <span className="text-sm font-bold text-lien">Lien 美容室</span>
-                    </div>
-                    <Row label="店舗名">
-                      <input
-                        value={lien.name}
-                        onChange={(e) => setLien({ ...lien, name: e.target.value })}
-                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
-                      />
-                    </Row>
-                    <Row label="電話番号">
-                      <input
-                        value={lien.phone}
-                        onChange={(e) => setLien({ ...lien, phone: e.target.value })}
-                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
-                      />
-                    </Row>
-                    <Row label="住所">
-                      <input
-                        value={lien.address}
-                        onChange={(e) => setLien({ ...lien, address: e.target.value })}
-                        className="w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text"
-                      />
-                    </Row>
-                  </Card>
+
+                  {storeOrder.map((id) => {
+                    const edit = storeEdits[id] ?? storeInfo[id]
+                    if (!edit) return null
+                    const isDefault = id === 'flag' || id === 'lien'
+                    return (
+                      <Card key={id}>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <StoreDot store={id} />
+                            <span className="text-sm font-bold" style={{ color: edit.color }}>
+                              {edit.name || id}
+                            </span>
+                          </div>
+                          {!isDefault && (
+                            <button
+                              onClick={() => handleRemoveStore(id)}
+                              className="text-xs text-danger hover:bg-danger-soft px-2 py-1 rounded transition-colors"
+                            >
+                              削除
+                            </button>
+                          )}
+                        </div>
+                        <Row label="店舗名">
+                          <input
+                            value={edit.name}
+                            onChange={(e) => setStoreEdits((prev) => ({ ...prev, [id]: { ...prev[id], name: e.target.value } }))}
+                            className={inputCls}
+                          />
+                        </Row>
+                        <Row label="電話番号">
+                          <input
+                            value={edit.phone}
+                            onChange={(e) => setStoreEdits((prev) => ({ ...prev, [id]: { ...prev[id], phone: e.target.value } }))}
+                            className={inputCls}
+                          />
+                        </Row>
+                        <Row label="住所">
+                          <input
+                            value={edit.address}
+                            onChange={(e) => setStoreEdits((prev) => ({ ...prev, [id]: { ...prev[id], address: e.target.value } }))}
+                            className={inputCls}
+                          />
+                        </Row>
+                        <Row label="カラー">
+                          <div className="flex gap-1.5 flex-wrap">
+                            {PRESET_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                onClick={() => setStoreEdits((prev) => ({ ...prev, [id]: { ...prev[id], color: c } }))}
+                                className="w-6 h-6 rounded-full transition-all"
+                                style={{
+                                  background: c,
+                                  outline: edit.color === c ? `2px solid ${c}` : 'none',
+                                  outlineOffset: '2px',
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </Row>
+                      </Card>
+                    )
+                  })}
+
+                  {/* 新規店舗追加フォーム */}
+                  {showAddStore ? (
+                    <Card>
+                      <p className="text-xs font-semibold text-muted mb-3">新規店舗を追加</p>
+                      <Row label="店舗名">
+                        <input
+                          value={newStoreName}
+                          onChange={(e) => setNewStoreName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddStore() }}
+                          placeholder="店舗名を入力"
+                          className={inputCls}
+                          autoFocus
+                        />
+                      </Row>
+                      <Row label="カラー">
+                        <div className="flex gap-1.5 flex-wrap">
+                          {PRESET_COLORS.map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => setNewStoreColor(c)}
+                              className="w-6 h-6 rounded-full transition-all"
+                              style={{
+                                background: c,
+                                outline: newStoreColor === c ? `2px solid ${c}` : 'none',
+                                outlineOffset: '2px',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </Row>
+                      <div className="flex gap-2 justify-end mt-3 pt-3 border-t border-border">
+                        <Btn variant="ghost" size="sm" onClick={() => { setShowAddStore(false); setNewStoreName('') }}>キャンセル</Btn>
+                        <Btn variant="primary" size="sm" disabled={!newStoreName.trim()} onClick={handleAddStore}>追加する</Btn>
+                      </div>
+                    </Card>
+                  ) : (
+                    <button
+                      onClick={() => setShowAddStore(true)}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-accent hover:opacity-75 transition-opacity"
+                    >
+                      ＋ 店舗を追加
+                    </button>
+                  )}
+
                   <div className="flex justify-end">
                     <Btn variant="primary" onClick={saveStoreInfo}>変更を保存</Btn>
                   </div>
@@ -442,28 +613,33 @@ export function Settings() {
                   <Card>
                     <p className="text-xs font-semibold text-muted mb-3">デフォルト下限数（新規商品登録時の初期値）</p>
                     <div className="grid grid-cols-2 gap-5">
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <StoreDot store="flag" />
-                          <span className="text-sm font-bold text-flag">flag 美容室</span>
-                        </div>
-                        <div className="flex items-center h-10 border border-border-strong rounded-md overflow-hidden">
-                          <button onClick={() => setFlagMin(Math.max(0, flagMin - 1))} className="w-9 flex items-center justify-center text-muted hover:bg-bg">−</button>
-                          <span className="flex-1 text-center font-bold tabular-nums">{flagMin}</span>
-                          <button onClick={() => setFlagMin(flagMin + 1)} className="w-9 flex items-center justify-center text-muted hover:bg-bg">＋</button>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <StoreDot store="lien" />
-                          <span className="text-sm font-bold text-lien">Lien 美容室</span>
-                        </div>
-                        <div className="flex items-center h-10 border border-border-strong rounded-md overflow-hidden">
-                          <button onClick={() => setLienMin(Math.max(0, lienMin - 1))} className="w-9 flex items-center justify-center text-muted hover:bg-bg">−</button>
-                          <span className="flex-1 text-center font-bold tabular-nums">{lienMin}</span>
-                          <button onClick={() => setLienMin(lienMin + 1)} className="w-9 flex items-center justify-center text-muted hover:bg-bg">＋</button>
-                        </div>
-                      </div>
+                      {storeOrder.map((id) => {
+                        const info = storeInfo[id]
+                        const val = minStockEdits[id] ?? 3
+                        return (
+                          <div key={id}>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <StoreDot store={id} />
+                              <span className="text-sm font-bold" style={{ color: info?.color }}>{info?.name ?? id}</span>
+                            </div>
+                            <div className="flex items-center h-10 border border-border-strong rounded-md overflow-hidden">
+                              <button
+                                onClick={() => setMinStockEdits((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 3) - 1) }))}
+                                className="w-9 flex items-center justify-center text-muted hover:bg-bg"
+                              >
+                                −
+                              </button>
+                              <span className="flex-1 text-center font-bold tabular-nums">{val}</span>
+                              <button
+                                onClick={() => setMinStockEdits((prev) => ({ ...prev, [id]: (prev[id] ?? 3) + 1 }))}
+                                className="w-9 flex items-center justify-center text-muted hover:bg-bg"
+                              >
+                                ＋
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </Card>
                   <Card>
@@ -491,20 +667,18 @@ export function Settings() {
                       <p className="text-sm font-semibold text-text mb-0.5">在庫不足アラート</p>
                       <p className="text-xs text-faint mb-3">下限を下回った商品が発生したとき</p>
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <StoreDot store="flag" />
-                            <span className="text-sm text-text">flag 美容室</span>
+                        {storeOrder.map((id) => (
+                          <div key={id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <StoreDot store={id} />
+                              <span className="text-sm text-text">{storeInfo[id]?.name ?? id}</span>
+                            </div>
+                            <Toggle
+                              value={notifyByStore[id] ?? true}
+                              onChange={(v) => setNotifyByStore((prev) => ({ ...prev, [id]: v }))}
+                            />
                           </div>
-                          <Toggle value={notifyLowStockFlag} onChange={setNotifyLowStockFlag} />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <StoreDot store="lien" />
-                            <span className="text-sm text-text">Lien 美容室</span>
-                          </div>
-                          <Toggle value={notifyLowStockLien} onChange={setNotifyLowStockLien} />
-                        </div>
+                        ))}
                       </div>
                     </div>
                     <Row label="入荷・発注通知" sub="発注ステータスが変更されたとき">
@@ -585,14 +759,12 @@ export function Settings() {
                       <div className="flex flex-col items-center py-4 gap-6">
                         <p className="text-sm font-semibold text-text">{PIN_STEP_LABEL[pinStep]}</p>
 
-                        {/* ドット表示 */}
                         <div className="flex gap-5">
                           {[0,1,2,3].map((i) => (
                             <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all ${i < pinInput.length ? 'bg-accent border-accent' : 'border-border-strong'}`} />
                           ))}
                         </div>
 
-                        {/* 数字パッド */}
                         <div className="grid grid-cols-3 gap-2 w-60">
                           {PAD.map((key, i) =>
                             key === '' ? <div key={i} /> : (
@@ -635,6 +807,29 @@ export function Settings() {
               {section === 'データ管理' && (
                 <>
                   <h2 className="text-lg font-bold">データ管理</h2>
+
+                  {/* CSVインポート */}
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-3">CSVインポート</p>
+                    <Row label="商品マスタ" sub="エクスポートしたCSVを読み込み">
+                      <Btn variant="ghost" size="sm" onClick={() => importRef.current?.click()}>↑ CSV</Btn>
+                    </Row>
+                    <input
+                      ref={importRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) importProducts(file)
+                      }}
+                    />
+                    <p className="text-xs text-faint mt-2 leading-relaxed">
+                      商品マスタCSVを読み込みます。IDが一致する商品は上書き更新、新しいIDは追加されます。
+                    </p>
+                  </Card>
+
+                  {/* CSVエクスポート */}
                   <Card>
                     <p className="text-xs font-semibold text-muted mb-3">CSVエクスポート</p>
                     <Row label="商品マスタ" sub={`全${products.length}件の商品データ`}>
@@ -650,6 +845,7 @@ export function Settings() {
                       <Btn variant="ghost" size="sm" onClick={exportStaffPurchases}>↓ CSV</Btn>
                     </Row>
                   </Card>
+
                   <Card>
                     <p className="text-xs font-semibold text-muted mb-1">アプリ情報</p>
                     <Row label="バージョン">

@@ -23,7 +23,11 @@ export function AppBar({ title, back = false, onBack, showStoreSwitch = true, ri
         </button>
       )}
       <span className="text-xl font-bold text-text flex-1 truncate">{title}</span>
-      {showStoreSwitch && <StoreSwitch />}
+      {showStoreSwitch && (
+        <div className="flex-shrink-0 max-w-[160px] md:max-w-none overflow-hidden">
+          <StoreSwitch />
+        </div>
+      )}
       {right && <div className="flex items-center gap-2">{right}</div>}
     </div>
   )

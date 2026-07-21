@@ -1,32 +1,31 @@
 import { useAppStore } from '../store'
-import type { StoreFilter } from '../types'
-
-const OPTIONS: { value: StoreFilter; label: string }[] = [
-  { value: 'all', label: '全店' },
-  { value: 'flag', label: 'flag' },
-  { value: 'lien', label: 'Lien' },
-]
 
 export function StoreSwitch() {
-  const { currentStore, setCurrentStore } = useAppStore()
+  const { currentStore, setCurrentStore, storeOrder, storeInfo } = useAppStore()
 
   return (
-    <div className="flex border border-border rounded-md overflow-hidden">
-      {OPTIONS.map((opt) => {
-        const active = currentStore === opt.value
-        const activeColor =
-          opt.value === 'flag' ? 'bg-flag text-white' :
-          opt.value === 'lien' ? 'bg-lien text-white' :
-          'bg-text text-white'
+    <div className="flex border border-border rounded-md overflow-hidden overflow-x-auto max-w-full">
+      <button
+        onClick={() => setCurrentStore('all')}
+        className={`px-3 h-9 text-xs font-bold transition-colors flex-shrink-0 ${
+          currentStore === 'all' ? 'bg-text text-white' : 'bg-surface text-muted'
+        }`}
+      >
+        全店
+      </button>
+      {storeOrder.map((id) => {
+        const info = storeInfo[id]
+        const active = currentStore === id
         return (
           <button
-            key={opt.value}
-            onClick={() => setCurrentStore(opt.value)}
-            className={`px-4 h-9 text-xs font-bold transition-colors ${
-              active ? activeColor : 'bg-surface text-muted'
+            key={id}
+            onClick={() => setCurrentStore(id)}
+            className={`px-3 h-9 text-xs font-bold transition-colors flex-shrink-0 border-l border-border ${
+              active ? 'text-white' : 'bg-surface text-muted'
             }`}
+            style={active ? { background: info?.color ?? '#888888' } : {}}
           >
-            {opt.label}
+            {info?.name ?? id}
           </button>
         )
       })}

@@ -5,7 +5,7 @@ import { useAppStore } from '../store'
 export function useFirestoreSync() {
   const {
     products, stocks, transactions, transfers,
-    staffPurchases, staffMembers, storeInfo, appSettings,
+    staffPurchases, staffMembers, storeInfo, storeOrder, appSettings,
     stocktakeSnapshots,
     categories, makers, dealers, dealerReps,
     setProductImages,
@@ -52,7 +52,7 @@ export function useFirestoreSync() {
       if (Date.now() < writeBlockedUntil.current) return
       writeToFirestore({
         products, stocks, transactions, transfers,
-        staffPurchases, staffMembers, storeInfo, appSettings,
+        staffPurchases, staffMembers, storeInfo, storeOrder, appSettings,
         stocktakeSnapshots,
         categories, makers, dealers, dealerReps,
       }).catch((e) => console.error('[Firestore write]', e))
@@ -62,7 +62,7 @@ export function useFirestoreSync() {
   }, [
     firestoreConfirmed,
     products, stocks, transactions, transfers,
-    staffPurchases, staffMembers, storeInfo, appSettings,
+    staffPurchases, staffMembers, storeInfo, storeOrder, appSettings,
     stocktakeSnapshots,
     categories, makers, dealers, dealerReps,
   ])

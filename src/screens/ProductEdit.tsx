@@ -50,12 +50,20 @@ export function ProductEdit() {
   const { id } = useParams()
   const location = useLocation()
   const backCategory = (location.state as { category?: string } | null)?.category
-  const { products, stocks, upsertProduct, upsertStock, categories, makers, dealers, dealerReps } = useAppStore()
+  const { products, stocks, upsertProduct, upsertStock, categories, makers, dealers, dealerReps, storeInfo, storeOrder } = useAppStore()
 
   const goBack = () => navigate('/products', { state: { category: backCategory } })
   const existing = id && id !== 'new' ? products.find((p) => p.id === id) : undefined
-  const existingFlagStock = existing ? stocks.find((s) => s.productId === existing.id && s.storeId === 'flag') : undefined
-  const existingLienStock = existing ? stocks.find((s) => s.productId === existing.id && s.storeId === 'lien') : undefined
+
+  type StockState = { currentStock: number; minStock: number; active: boolean }
+  const [storeStocks, setStoreStocks] = useState<Record<string, StockState>>(() => {
+    const result: Record<string, StockState> = {}
+    storeOrder.forEach((sid) => {
+      const s = existing ? stocks.find((st) => st.productId === existing.id && st.storeId === sid) : undefined
+      result[sid] = { currentStock: s?.currentStock ?? 0, minStock: s?.minStock ?? 3, active: s?.active ?? true }
+    })
+    return result
+  })
 
   const [name, setName] = useState(existing?.name ?? '')
   const [category, setCategory] = useState(existing?.category ?? '')
@@ -63,12 +71,6 @@ export function ProductEdit() {
   const [barcode, setBarcode] = useState(existing?.barcode ?? '')
   const [purchasePrice, setPurchasePrice] = useState(existing?.purchasePrice?.toString() ?? '')
   const [sellPrice, setSellPrice] = useState(existing?.sellPrice?.toString() ?? '')
-  const [flagStock, setFlagStock] = useState(existingFlagStock?.currentStock ?? 0)
-  const [flagMin, setFlagMin] = useState(existingFlagStock?.minStock ?? 3)
-  const [flagActive, setFlagActive] = useState(existingFlagStock?.active ?? true)
-  const [lienStock, setLienStock] = useState(existingLienStock?.currentStock ?? 0)
-  const [lienMin, setLienMin] = useState(existingLienStock?.minStock ?? 3)
-  const [lienActive, setLienActive] = useState(existingLienStock?.active ?? true)
   const [memo, setMemo] = useState(existing?.memo ?? '')
   const [taxRate, setTaxRate] = useState<8 | 10>(existing?.taxRate ?? 10)
   const [dealer, setDealer] = useState(existing?.dealer ?? '')
@@ -95,10 +97,12 @@ export function ProductEdit() {
     setDealer(existing.dealer ?? '')
     setDealerRep(existing.dealerRep ?? '')
 
-    const fStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'flag')
-    const lStock = stocks.find((s) => s.productId === existing.id && s.storeId === 'lien')
-    if (fStock) { setFlagStock(fStock.currentStock); setFlagMin(fStock.minStock); setFlagActive(fStock.active) }
-    if (lStock) { setLienStock(lStock.currentStock); setLienMin(lStock.minStock); setLienActive(lStock.active) }
+    const updated: Record<string, StockState> = {}
+    storeOrder.forEach((sid) => {
+      const s = stocks.find((st) => st.productId === existing.id && st.storeId === sid)
+      updated[sid] = { currentStock: s?.currentStock ?? 0, minStock: s?.minStock ?? 3, active: s?.active ?? true }
+    })
+    setStoreStocks(updated)
   }, [existing?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = existing ? '商品登録・編集' : '商品登録・編集'
@@ -146,8 +150,10 @@ export function ProductEdit() {
       dealer: dealer || undefined,
       dealerRep: dealerRep || undefined,
     })
-    upsertStock({ productId, storeId: 'flag', currentStock: flagStock, minStock: flagMin, active: flagActive })
-    upsertStock({ productId, storeId: 'lien', currentStock: lienStock, minStock: lienMin, active: lienActive })
+    storeOrder.forEach((sid) => {
+      const ss = storeStocks[sid] ?? { currentStock: 0, minStock: 3, active: true }
+      upsertStock({ productId, storeId: sid, currentStock: ss.currentStock, minStock: ss.minStock, active: ss.active })
+    })
   }
 
   const handleSave = async () => {
@@ -169,7 +175,10 @@ export function ProductEdit() {
       await doSave(String(Date.now()))
       // カテゴリ・メーカー・税率・下限数はそのまま維持して次の商品へ
       setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
-      setMemo(''); setImage(''); setFlagStock(0); setLienStock(0)
+      setMemo(''); setImage('')
+      setStoreStocks((prev) =>
+        Object.fromEntries(Object.entries(prev).map(([sid, ss]) => [sid, { ...ss, currentStock: 0 }]))
+      )
       setUploading(false)
       setSavedToast(true)
       setTimeout(() => setSavedToast(false), 1800)
@@ -205,8 +214,8 @@ export function ProductEdit() {
       />
       <div className="flex flex-1 overflow-hidden">
         <SideNav />
-        <main className="flex-1 overflow-y-auto p-6 bg-bg">
-          <div className="grid grid-cols-[1fr_1.4fr] gap-5 h-full">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-bg">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-5">
             {/* 左カラム: 画像＋バーコード */}
             <div className="flex flex-col gap-3">
               {/* 商品画像 */}
@@ -278,7 +287,7 @@ export function ProductEdit() {
             </div>
 
             {/* 右カラム: フォーム */}
-            <div className="bg-surface border border-border rounded-lg p-6 overflow-y-auto">
+            <div className="bg-surface border border-border rounded-lg p-4 md:p-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <Field label="商品名" required>
@@ -368,53 +377,37 @@ export function ProductEdit() {
                 <div className="col-span-2 pt-3 border-t border-border">
                   <p className="text-sm font-bold mb-3">店舗別の在庫設定</p>
                   <div className="grid grid-cols-2 gap-3">
-                    {/* flag */}
-                    <div className={`rounded-lg p-3.5 border transition-opacity ${flagActive ? '' : 'opacity-50'}`} style={{ background: '#E6EEF9', borderColor: '#BFD3EC' }}>
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <StoreDot store="flag" />
-                        <span className="text-xs font-bold text-flag">flag 美容室</span>
-                      </div>
-                      <div className={`grid grid-cols-2 gap-2 mb-2 ${!flagActive ? 'pointer-events-none' : ''}`}>
-                        <Field label="現在庫">
-                          <NumberInput value={flagStock} onChange={setFlagStock} />
-                        </Field>
-                        <Field label="下限">
-                          <NumberInput value={flagMin} onChange={setFlagMin} />
-                        </Field>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setFlagActive((v) => !v)}
-                        className="flex items-center gap-2 text-xs text-muted cursor-pointer"
-                      >
-                        <span className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${flagActive ? 'border-flag bg-flag text-white' : 'border-border-strong bg-surface text-transparent'}`}>✓</span>
-                        この店舗で取り扱う
-                      </button>
-                    </div>
-
-                    {/* lien */}
-                    <div className={`rounded-lg p-3.5 border transition-opacity ${lienActive ? '' : 'opacity-50'}`} style={{ background: '#F1E8F5', borderColor: '#DDC3E6' }}>
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <StoreDot store="lien" />
-                        <span className="text-xs font-bold text-lien">Lien 美容室</span>
-                      </div>
-                      <div className={`grid grid-cols-2 gap-2 mb-2 ${!lienActive ? 'pointer-events-none' : ''}`}>
-                        <Field label="現在庫">
-                          <NumberInput value={lienStock} onChange={setLienStock} />
-                        </Field>
-                        <Field label="下限">
-                          <NumberInput value={lienMin} onChange={setLienMin} />
-                        </Field>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setLienActive((v) => !v)}
-                        className="flex items-center gap-2 text-xs text-muted cursor-pointer"
-                      >
-                        <span className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${lienActive ? 'border-lien bg-lien text-white' : 'border-border-strong bg-surface text-transparent'}`}>✓</span>
-                        この店舗で取り扱う
-                      </button>
-                    </div>
+                    {storeOrder.map((sid) => {
+                      const info = storeInfo[sid]
+                      const ss = storeStocks[sid] ?? { currentStock: 0, minStock: 3, active: true }
+                      const hex = info?.color ?? '#888888'
+                      const bg = hex + '22'
+                      const border = hex + '55'
+                      return (
+                        <div key={sid} className={`rounded-lg p-3.5 border transition-opacity ${ss.active ? '' : 'opacity-50'}`} style={{ background: bg, borderColor: border }}>
+                          <div className="flex items-center gap-1.5 mb-3">
+                            <StoreDot store={sid} />
+                            <span className="text-xs font-bold" style={{ color: hex }}>{info?.name ?? sid}</span>
+                          </div>
+                          <div className={`grid grid-cols-2 gap-2 mb-2 ${!ss.active ? 'pointer-events-none' : ''}`}>
+                            <Field label="現在庫">
+                              <NumberInput value={ss.currentStock} onChange={(v) => setStoreStocks((prev) => ({ ...prev, [sid]: { ...ss, currentStock: v } }))} />
+                            </Field>
+                            <Field label="下限">
+                              <NumberInput value={ss.minStock} onChange={(v) => setStoreStocks((prev) => ({ ...prev, [sid]: { ...ss, minStock: v } }))} />
+                            </Field>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setStoreStocks((prev) => ({ ...prev, [sid]: { ...ss, active: !ss.active } }))}
+                            className="flex items-center gap-2 text-xs text-muted cursor-pointer"
+                          >
+                            <span className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${ss.active ? 'text-white' : 'border-border-strong bg-surface text-transparent'}`} style={ss.active ? { borderColor: hex, background: hex } : {}}>✓</span>
+                            この店舗で取り扱う
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
