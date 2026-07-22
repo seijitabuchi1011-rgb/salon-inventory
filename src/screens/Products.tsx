@@ -22,15 +22,7 @@ import { Btn } from '../components/Btn'
 import { useAppStore } from '../store'
 import type { Product, StoreStock } from '../types'
 
-const CATEGORIES = [
-  'すべて',
-  'カラー剤', 'ブリーチ剤', 'カラーオキシ',
-  'パーマ剤', 'プレックス剤', '髪ドラ',
-  'oggi otto', 'H2', '処理剤', '小物類',
-  'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
-]
-
-const MOVE_CATEGORIES = CATEGORIES.filter((c) => c !== 'すべて')
+// カテゴリはストアから取得するため定数は削除（下のコンポーネントで categories を使用）
 
 function stockStatus(current: number, min: number): { label: string; variant: 'danger' | 'warn' | 'ok' } {
   if (current <= min) return { label: '不足', variant: 'danger' }
@@ -177,7 +169,7 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { currentStore, products, stocks, upsertStock, deleteProduct, bulkDeleteProducts, reorderProducts, bulkUpdateCategory } = useAppStore()
+  const { currentStore, products, stocks, upsertStock, deleteProduct, bulkDeleteProducts, reorderProducts, bulkUpdateCategory, categories } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
@@ -283,7 +275,7 @@ export function Products() {
               </div>
             </div>
             <div className="flex items-center gap-2 overflow-x-auto">
-              {CATEGORIES.map((cat) => (
+              {['すべて', ...categories].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setCategory(cat)}
@@ -366,7 +358,7 @@ export function Products() {
             className="flex-1 h-9 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-accent"
           >
             <option value="">カテゴリを選択</option>
-            {MOVE_CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
@@ -410,7 +402,11 @@ export function Products() {
                   キャンセル
                 </button>
                 <button
-                  onClick={() => { deleteProduct(confirmId); setConfirmId(null) }}
+                  onClick={() => {
+                    deleteProduct(confirmId)
+                    setSelectedIds((prev) => { const n = new Set(prev); n.delete(confirmId); return n })
+                    setConfirmId(null)
+                  }}
                   className="px-4 py-2 text-sm rounded-md bg-danger text-white hover:bg-danger/90 transition-colors"
                 >
                   削除する
