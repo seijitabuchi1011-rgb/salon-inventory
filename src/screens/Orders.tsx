@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { StoreDot } from '../components/StoreDot'
@@ -28,8 +28,16 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('すべて')
   const [modal, setModal] = useState<ModalState | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isReceive = tab === 'receive'
+
+  function showToast(msg: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast(msg)
+    toastTimer.current = setTimeout(() => setToast(null), 2500)
+  }
 
   function getStock(productId: string, storeId: string) {
     return stocks.find((s) => s.productId === productId && s.storeId === storeId)
@@ -42,6 +50,10 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {
       addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
+      if (delta > 0) {
+        const p = products.find((pr) => pr.id === productId)
+        showToast(`仕入れ記録: ${p?.name ?? '商品'} +1`)
+      }
     }
     const notifyThisStore = appSettings.notifyLowStockByStore?.[storeId] ?? appSettings.notifyLowStock
     if (delta < 0 && notifyThisStore && next <= (s?.minStock ?? 3)) {
@@ -87,6 +99,9 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
         '在庫不足アラート',
         `${modal.productName} の在庫が下限を下回りました。\n店舗: ${storeInfo[modal.storeId]?.name ?? modal.storeId}\n現在庫: ${newStock} 個（下限: ${modal.minStock} 個）`
       )
+    }
+    if (isReceive) {
+      showToast(`仕入れ記録: ${modal.productName} +${modal.quantity} → 今月仕入高に追加`)
     }
     setModal(null)
   }
@@ -380,6 +395,12 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
               </Btn>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-ok text-white text-sm font-semibold px-5 py-3 rounded-full shadow-lg pointer-events-none whitespace-nowrap">
+          ✓ {toast}
         </div>
       )}
     </div>

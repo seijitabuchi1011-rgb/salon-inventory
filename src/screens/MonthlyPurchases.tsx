@@ -315,7 +315,7 @@ export function MonthlyPurchases() {
                         <td className="px-2 py-3 text-center">
                           <button
                             onClick={() => setConfirmDeleteId(t.id)}
-                            className="w-7 h-7 rounded-md text-faint hover:text-danger hover:bg-danger-soft transition-colors flex items-center justify-center text-sm"
+                            className="w-8 h-8 rounded-md text-danger bg-danger-soft hover:bg-danger hover:text-white transition-colors flex items-center justify-center text-sm font-bold"
                           >
                             ✕
                           </button>
