@@ -135,11 +135,7 @@ export function ProductEdit() {
   }
 
   async function doSave(productId: string) {
-    if (image?.startsWith('data:')) {
-      await writeProductImage(productId, image)
-    } else if (!image && existing) {
-      await deleteProductImage(productId).catch(() => {})
-    }
+    // 商品データを先に保存（画像の成否に関わらず必ず実行）
     upsertProduct({
       id: productId, name, category, maker, barcode,
       purchasePrice: Number(purchasePrice) || 0,
@@ -154,6 +150,13 @@ export function ProductEdit() {
       const ss = storeStocks[sid] ?? { currentStock: 0, minStock: 3, active: true }
       upsertStock({ productId, storeId: sid, currentStock: ss.currentStock, minStock: ss.minStock, active: ss.active })
     })
+
+    // 画像は別途 Firestore に保存（失敗しても商品データは保存済み）
+    if (image?.startsWith('data:')) {
+      writeProductImage(productId, image).catch((e) => console.warn('[画像同期失敗]', e))
+    } else if (!image && existing) {
+      deleteProductImage(productId).catch(() => {})
+    }
   }
 
   const handleSave = async () => {
@@ -161,9 +164,7 @@ export function ProductEdit() {
     try {
       await doSave(existing?.id ?? String(Date.now()))
       goBack()
-    } catch (e) {
-      console.error('[画像保存失敗]', e)
-      alert('画像の保存に失敗しました。')
+    } finally {
       setUploading(false)
     }
   }
@@ -173,19 +174,15 @@ export function ProductEdit() {
     setUploading(true)
     try {
       await doSave(String(Date.now()))
-      // カテゴリ・メーカー・税率・下限数はそのまま維持して次の商品へ
       setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
       setMemo(''); setImage('')
       setStoreStocks((prev) =>
         Object.fromEntries(Object.entries(prev).map(([sid, ss]) => [sid, { ...ss, currentStock: 0 }]))
       )
-      setUploading(false)
       setSavedToast(true)
       setTimeout(() => setSavedToast(false), 1800)
       setTimeout(() => nameInputRef.current?.focus(), 50)
-    } catch (e) {
-      console.error('[画像保存失敗]', e)
-      alert('画像の保存に失敗しました。')
+    } finally {
       setUploading(false)
     }
   }
