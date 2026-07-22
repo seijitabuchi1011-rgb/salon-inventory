@@ -8,14 +8,6 @@ import { sendNotification } from '../lib/email'
 
 type Tab = 'receive' | 'dispense'
 
-const CATEGORIES = [
-  'すべて',
-  'カラー剤', 'ブリーチ剤', 'カラーオキシ',
-  'パーマ剤', 'プレックス剤', '髪ドラ',
-  'oggi otto', 'H2', '処理剤', '小物類',
-  'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
-]
-
 type ModalState = {
   productId: string
   productName: string
@@ -28,7 +20,7 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder } = useAppStore()
+  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
   const visibleStores = currentStore === 'all' ? storeOrder : storeOrder.filter((id) => id === currentStore)
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
@@ -244,7 +236,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
 
             {/* カテゴリ */}
             <div className="flex gap-2 overflow-x-auto">
-              {CATEGORIES.map((cat) => (
+              {['すべて', ...categories].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setCategory(cat)}

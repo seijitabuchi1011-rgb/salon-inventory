@@ -158,8 +158,7 @@ export function ProductEdit() {
 
   const handleSave = () => {
     doSave(existing?.id ?? String(Date.now()))
-    setSavedToast(true)
-    setTimeout(() => goBack(), 400)
+    navigate(-1)
   }
 
   const handleSaveAndNext = () => {
