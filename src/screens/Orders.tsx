@@ -67,7 +67,13 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     const next = Math.max(0, (s?.currentStock ?? 0) + delta)
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {
-      addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
+      try {
+        addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
+      } catch (e) {
+        console.error('[addTransaction]', e)
+        showToast(`記録エラー: ${e instanceof Error ? e.message.slice(0, 40) : String(e).slice(0, 40)}`)
+        return
+      }
       if (delta > 0) {
         const p = products.find((pr) => pr.id === productId)
         showToast(`仕入れ記録: ${p?.name ?? '商品'} +1`)

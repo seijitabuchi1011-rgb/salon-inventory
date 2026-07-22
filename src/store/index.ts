@@ -1,5 +1,20 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
+
+// localStorage.setItem が QuotaExceededError を投げても状態更新を止めないためのラッパー
+const safeLocalStorage = {
+  getItem: (name: string) => {
+    try { return localStorage.getItem(name) } catch { return null }
+  },
+  setItem: (name: string, value: string) => {
+    try { localStorage.setItem(name, value) } catch (e) {
+      console.warn('[salon-store] localStorage write failed (quota?):', e)
+    }
+  },
+  removeItem: (name: string) => {
+    try { localStorage.removeItem(name) } catch { /* ignore */ }
+  },
+}
 import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot, StaffPayment } from '../types'
 
 export interface StoreInfo {
@@ -1238,6 +1253,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'salon-inventory-store',
+      storage: createJSONStorage(() => safeLocalStorage),
       version: 9,
       partialize: (state) => ({
         products: state.products,
