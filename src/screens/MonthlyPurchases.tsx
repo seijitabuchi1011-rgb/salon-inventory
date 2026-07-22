@@ -42,9 +42,10 @@ const BLANK_ADD = (): AddForm => ({
 })
 
 export function MonthlyPurchases() {
-  const { transactions, products, addTransaction, deleteTransaction } = useAppStore()
+  const { transactions, products, storeOrder, storeInfo, addTransaction, deleteTransaction } = useAppStore()
   const [monthOffset, setMonthOffset] = useState(0)
   const [store, setStore] = useState<StoreF>('all')
+  const [viewMode, setViewMode] = useState<'detail' | 'byProduct'>('detail')
   const [showAddModal, setShowAddModal] = useState(false)
   const [form, setForm] = useState<AddForm>(BLANK_ADD())
   const [showDrop, setShowDrop] = useState(false)
@@ -58,6 +59,23 @@ export function MonthlyPurchases() {
     if (store !== 'all' && t.storeId !== store) return false
     return true
   }).sort((a, b) => b.timestamp - a.timestamp)
+
+  // 商品別集計
+  type AggRow = { productId: string; name: string; category: string; taxRate: 8 | 10; unitIncTax: number; totalQty: number; totalIncTax: number }
+  const aggregated: AggRow[] = Object.values(
+    filtered.reduce<Record<string, AggRow>>((acc, t) => {
+      const p = products.find((pr) => pr.id === t.productId)
+      const key = t.productId
+      const rate = p?.taxRate ?? 10
+      const unitIncTax = taxIncluded(p?.purchasePrice ?? 0, rate)
+      if (!acc[key]) {
+        acc[key] = { productId: key, name: p?.name ?? '不明商品', category: p?.category ?? '', taxRate: rate, unitIncTax, totalQty: 0, totalIncTax: 0 }
+      }
+      acc[key].totalQty += t.quantity
+      acc[key].totalIncTax += unitIncTax * t.quantity
+      return acc
+    }, {})
+  ).sort((a, b) => b.totalIncTax - a.totalIncTax)
 
   // KPIs (aggregated from all receives in range regardless of store filter for context, but respect filter)
   const totalQty = filtered.reduce((sum, t) => sum + t.quantity, 0)
@@ -130,30 +148,46 @@ export function MonthlyPurchases() {
                 )}
               </div>
 
-              <div className="flex gap-1.5 ml-2">
+              <div className="flex gap-1.5 ml-2 overflow-x-auto">
                 <button
                   onClick={() => setStore('all')}
-                  className={`px-3 h-8 rounded-md text-xs font-bold transition-colors ${store === 'all' ? 'bg-text text-white' : 'bg-bg text-muted border border-border'}`}
+                  className={`flex-shrink-0 px-3 h-8 rounded-md text-xs font-bold transition-colors ${store === 'all' ? 'bg-text text-white' : 'bg-bg text-muted border border-border'}`}
                 >
                   全店
                 </button>
-                {(['flag', 'lien'] as const).map((s) => (
+                {storeOrder.map((s) => (
                   <button
                     key={s}
-                    onClick={() => setStore(s)}
-                    className={`flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-bold transition-colors ${
-                      store === s
-                        ? s === 'flag' ? 'bg-flag text-white' : 'bg-lien text-white'
-                        : 'bg-bg text-muted border border-border'
+                    onClick={() => setStore(s as StoreF)}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-bold transition-colors ${
+                      store === s ? 'text-white' : 'bg-bg text-muted border border-border'
                     }`}
+                    style={store === s ? { backgroundColor: storeInfo[s]?.color ?? '#888' } : undefined}
                   >
                     <StoreDot store={s} size="sm" />
-                    {s === 'flag' ? 'flag' : 'Lien'}
+                    {storeInfo[s]?.name ?? s}
                   </button>
                 ))}
               </div>
 
               <div className="flex-1" />
+
+              {/* 表示切替 */}
+              <div className="flex rounded-md border border-border overflow-hidden flex-shrink-0">
+                <button
+                  onClick={() => setViewMode('detail')}
+                  className={`px-3 h-8 text-xs font-bold transition-colors ${viewMode === 'detail' ? 'bg-accent text-white' : 'bg-surface text-muted'}`}
+                >
+                  明細
+                </button>
+                <button
+                  onClick={() => setViewMode('byProduct')}
+                  className={`px-3 h-8 text-xs font-bold border-l border-border transition-colors ${viewMode === 'byProduct' ? 'bg-accent text-white' : 'bg-surface text-muted'}`}
+                >
+                  商品別
+                </button>
+              </div>
+
               <Btn variant="primary" size="sm" onClick={openAdd}>＋ 仕入追加</Btn>
             </div>
 
@@ -184,7 +218,7 @@ export function MonthlyPurchases() {
             </div>
           </div>
 
-          {/* 明細テーブル（個別トランザクション） */}
+          {/* テーブルエリア */}
           <div className="flex-1 overflow-auto">
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted gap-3">
@@ -195,18 +229,59 @@ export function MonthlyPurchases() {
                 </p>
                 <Btn variant="primary" size="sm" onClick={openAdd}>＋ 仕入追加</Btn>
               </div>
-            ) : (
-              <table className="w-full text-sm border-collapse">
+            ) : viewMode === 'byProduct' ? (
+              /* 商品別集計テーブル */
+              <table className="w-full min-w-[560px] text-sm border-collapse">
                 <thead className="bg-bg border-b border-border sticky top-0 z-10">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">日付</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-muted w-14">税率</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">合計数量</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">仕入単価(税込)</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">合計金額(税込)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aggregated.map((row) => (
+                    <tr key={row.productId} className="border-b border-border hover:bg-bg transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-text">{row.name}</p>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted">{row.category}</td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                          row.taxRate === 8 ? 'bg-ok-soft text-ok' : 'bg-accent-soft text-accent'
+                        }`}>{row.taxRate}%</span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold">{row.totalQty}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted">¥{row.unitIncTax.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold text-accent">¥{row.totalIncTax.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-bg border-t-2 border-border sticky bottom-0">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-3 text-sm font-bold text-muted">合計</td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums">{totalQty}</td>
+                    <td />
+                    <td className="px-4 py-3 text-right font-bold tabular-nums text-accent">¥{totalAmountIncTax.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            ) : (
+              /* 明細テーブル（個別トランザクション） */
+              <table className="w-full min-w-[640px] text-sm border-collapse">
+                <thead className="bg-bg border-b border-border sticky top-0 z-10">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">日付</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-muted w-16">店舗</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-muted w-14">税率</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-16">数量</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">仕入単価(税込)</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-32">小計(税込)</th>
-                    <th className="w-12" />
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-28">単価(税込)</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-28">小計(税込)</th>
+                    <th className="w-10" />
                   </tr>
                 </thead>
                 <tbody>
@@ -226,7 +301,7 @@ export function MonthlyPurchases() {
                         <td className="px-3 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <StoreDot store={t.storeId} size="sm" />
-                            <span className="text-xs text-muted">{t.storeId === 'flag' ? 'flag' : 'Lien'}</span>
+                            <span className="text-xs text-muted">{storeInfo[t.storeId]?.name ?? t.storeId}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3 text-center">
@@ -303,22 +378,23 @@ export function MonthlyPurchases() {
             {/* 店舗 */}
             <div>
               <label className="text-xs font-semibold text-muted mb-1.5 block">店舗</label>
-              <div className="flex gap-2">
-                {(['flag', 'lien'] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, storeId: s }))}
-                    className={`flex-1 h-10 flex items-center justify-center gap-2 rounded-md text-sm font-bold border-2 transition-colors ${
-                      form.storeId === s
-                        ? s === 'flag' ? 'border-flag bg-flag text-white' : 'border-lien bg-lien text-white'
-                        : 'border-border text-muted bg-surface'
-                    }`}
-                  >
-                    <StoreDot store={s} size="sm" />
-                    {s === 'flag' ? 'flag' : 'Lien'}
-                  </button>
-                ))}
+              <div className="flex gap-2 flex-wrap">
+                {storeOrder.map((s) => {
+                  const color = storeInfo[s]?.color ?? '#888888'
+                  const active = form.storeId === s
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, storeId: s as StoreId }))}
+                      className="flex-1 h-10 flex items-center justify-center gap-2 rounded-md text-sm font-bold border-2 transition-colors min-w-[80px]"
+                      style={active ? { borderColor: color, backgroundColor: color, color: '#fff' } : { borderColor: 'var(--border)', color: 'var(--muted)', backgroundColor: 'var(--surface)' }}
+                    >
+                      <StoreDot store={s} size="sm" />
+                      {storeInfo[s]?.name ?? s}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
