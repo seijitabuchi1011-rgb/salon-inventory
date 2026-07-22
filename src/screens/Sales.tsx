@@ -390,7 +390,7 @@ export function Sales() {
             <p className="text-xs text-muted">削除すると元に戻せません。在庫数への反映は取り消されません。</p>
             <div className="flex gap-2">
               <Btn variant="ghost" className="flex-1" onClick={() => setConfirmDeleteId(null)}>キャンセル</Btn>
-              <Btn variant="danger" className="flex-1" onClick={() => { deleteTransaction(confirmDeleteId); setConfirmDeleteId(null) }}>削除</Btn>
+              <Btn variant="danger" className="flex-1" onClick={() => { const id = confirmDeleteId; setConfirmDeleteId(null); if (id) deleteTransaction(id) }}>削除</Btn>
             </div>
           </div>
         </div>

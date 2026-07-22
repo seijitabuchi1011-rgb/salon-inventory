@@ -403,9 +403,12 @@ export function Products() {
                 </button>
                 <button
                   onClick={() => {
-                    deleteProduct(confirmId)
-                    setSelectedIds((prev) => { const n = new Set(prev); n.delete(confirmId); return n })
+                    const id = confirmId
                     setConfirmId(null)
+                    if (id) {
+                      deleteProduct(id)
+                      setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n })
+                    }
                   }}
                   className="px-4 py-2 text-sm rounded-md bg-danger text-white hover:bg-danger/90 transition-colors"
                 >
@@ -432,10 +435,11 @@ export function Products() {
               </button>
               <button
                 onClick={() => {
-                  bulkDeleteProducts(Array.from(selectedIds))
+                  const ids = Array.from(selectedIds)
+                  setConfirmBulkDelete(false)
                   setSelectedIds(new Set())
                   setBulkCategory('')
-                  setConfirmBulkDelete(false)
+                  bulkDeleteProducts(ids)
                 }}
                 className="px-4 py-2 text-sm rounded-md bg-danger text-white hover:bg-danger/90 transition-colors"
               >

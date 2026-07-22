@@ -347,7 +347,7 @@ export function MonthlyPurchases() {
             <p className="text-xs text-muted">削除すると元に戻せません。在庫数には反映されません。</p>
             <div className="flex gap-2">
               <Btn variant="ghost" className="flex-1" onClick={() => setConfirmDeleteId(null)}>キャンセル</Btn>
-              <Btn variant="danger" className="flex-1" onClick={() => { deleteTransaction(confirmDeleteId); setConfirmDeleteId(null) }}>
+              <Btn variant="danger" className="flex-1" onClick={() => { const id = confirmDeleteId; setConfirmDeleteId(null); if (id) deleteTransaction(id) }}>
                 削除
               </Btn>
             </div>
