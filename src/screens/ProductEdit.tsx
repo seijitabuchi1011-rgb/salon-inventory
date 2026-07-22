@@ -77,8 +77,16 @@ export function ProductEdit() {
   const [dealerRep, setDealerRep] = useState(existing?.dealerRep ?? '')
   const [image, setImage] = useState(existing?.image ?? '')
   const [savedToast, setSavedToast] = useState(false)
+  const [pendingNav, setPendingNav] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
+
+  // doSave 後のレンダリング完了を待ってから遷移する
+  useEffect(() => {
+    if (pendingNav) {
+      navigate('/products', { state: { category: backCategory }, replace: true })
+    }
+  }, [pendingNav]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // useState の初期値は初回レンダリング時のみ評価されるため、
   // zustand の localStorage 復元後に確実に同期する
@@ -158,7 +166,7 @@ export function ProductEdit() {
 
   const handleSave = () => {
     doSave(existing?.id ?? String(Date.now()))
-    goBack()
+    setPendingNav(true)
   }
 
   const handleSaveAndNext = () => {

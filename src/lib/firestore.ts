@@ -1,4 +1,4 @@
-import { doc, collection, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore'
+import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import type { FirestoreData } from '../store'
 
@@ -44,6 +44,11 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
       onError?.(error)
     }
   )
+}
+
+export async function readFromFirestore(): Promise<FirestoreData | null> {
+  const snapshot = await getDoc(STORE_DOC)
+  return snapshot.exists() ? (snapshot.data() as FirestoreData) : null
 }
 
 export async function writeToFirestore(data: FirestoreData): Promise<void> {
