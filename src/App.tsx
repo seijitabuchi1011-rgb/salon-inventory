@@ -10,6 +10,7 @@ import { Transfer } from './screens/Transfer'
 import { Sales } from './screens/Sales'
 import { MonthlyPurchases } from './screens/MonthlyPurchases'
 import { StaffScreen } from './screens/Staff'
+import { Wholesale } from './screens/Wholesale'
 import { Settings } from './screens/Settings'
 import { useFirestoreSync } from './hooks/useFirestoreSync'
 import { BottomNav } from './components/BottomNav'
@@ -31,6 +32,7 @@ function AppRoutes() {
       <Route path="/transfer" element={<Transfer />} />
       <Route path="/sales" element={<Sales />} />
       <Route path="/monthly-purchases" element={<MonthlyPurchases />} />
+      <Route path="/wholesale" element={<Wholesale />} />
       <Route path="/staff" element={<StaffScreen />} />
       <Route path="/settings" element={<Settings />} />
     </Routes>
