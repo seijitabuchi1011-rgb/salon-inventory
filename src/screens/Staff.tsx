@@ -96,8 +96,8 @@ type UnifiedEntry = {
 
 export function StaffScreen() {
   const {
-    products, upsertProduct, stocks, upsertStock, addTransaction,
-    staffPurchases, addStaffPurchase,
+    products, upsertProduct, stocks, upsertStock, addTransaction, deleteTransaction,
+    staffPurchases, addStaffPurchase, deleteStaffPurchase,
     staffPayments, addStaffPayment, deleteStaffPayment,
     staffMembers, addStaffMember,
     transactions, storeOrder, storeInfo,
@@ -112,6 +112,8 @@ export function StaffScreen() {
   const [paymentForm, setPaymentForm] = useState<PaymentForm>(BLANK_PAYMENT(storeOrder[0] ?? 'flag'))
   const [showPayerDrop, setShowPayerDrop] = useState(false)
   const [confirmDeletePayId, setConfirmDeletePayId] = useState<string | null>(null)
+  // { id, entryType } で purchase / dispense を区別して削除
+  const [confirmDeleteEntry, setConfirmDeleteEntry] = useState<{ id: string; entryType: 'purchase' | 'dispense' } | null>(null)
   const [form, setForm] = useState<FormState>(BLANK_FORM())
   const [showProductDrop, setShowProductDrop] = useState(false)
   const [showBuyerDrop, setShowBuyerDrop] = useState(false)
@@ -409,6 +411,7 @@ export function StaffScreen() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">購入者/卸した人</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">記入した人</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-muted w-16">店舗</th>
+                    <th className="w-10" />
                   </tr>
                 </thead>
                 <tbody>
@@ -442,17 +445,22 @@ export function StaffScreen() {
                         {e.entryType === 'payment' ? '—' : e.quantity}
                       </td>
                       <td className="px-4 py-3 text-text font-medium">{e.person || '—'}</td>
-                      <td className="px-4 py-3 text-muted">
-                        {e.entryType === 'payment' ? (
-                          <button onClick={() => setConfirmDeletePayId(e.id)}
-                            className="text-xs text-faint hover:text-danger transition-colors">✕ 削除</button>
-                        ) : e.recordedBy}
-                      </td>
+                      <td className="px-4 py-3 text-muted">{e.recordedBy}</td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <StoreDot store={e.storeId} size="sm" />
                           <span className="text-xs text-muted">{storeInfo[e.storeId]?.name ?? e.storeId}</span>
                         </div>
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        <button
+                          onClick={() => {
+                            if (e.entryType === 'payment') setConfirmDeletePayId(e.id)
+                            else setConfirmDeleteEntry({ id: e.id, entryType: e.entryType })
+                          }}
+                          className="w-7 h-7 rounded-md text-faint hover:text-danger hover:bg-danger-soft transition-colors flex items-center justify-center text-sm">
+                          ✕
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -462,7 +470,7 @@ export function StaffScreen() {
                     <td colSpan={3} className="px-4 py-3 text-sm font-bold text-muted">合計</td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums text-accent">¥{(totalAmount - totalPaid).toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums">{filtered.filter((e) => e.entryType !== 'payment').reduce((s, e) => s + e.quantity, 0)}</td>
-                    <td colSpan={3} />
+                    <td colSpan={4} />
                   </tr>
                 </tfoot>
               </table>
@@ -817,6 +825,24 @@ export function StaffScreen() {
                 className="bg-ok border-ok hover:bg-ok/90">
                 ✓ 支払いを記録
               </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 購入・卸し削除確認 */}
+      {confirmDeleteEntry && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface rounded-xl p-6 shadow-xl flex flex-col gap-4 w-72">
+            <p className="text-base font-bold">この記録を削除しますか？</p>
+            <p className="text-xs text-muted">削除すると元に戻せません。</p>
+            <div className="flex gap-2">
+              <Btn variant="ghost" className="flex-1" onClick={() => setConfirmDeleteEntry(null)}>キャンセル</Btn>
+              <Btn variant="danger" className="flex-1" onClick={() => {
+                if (confirmDeleteEntry.entryType === 'purchase') deleteStaffPurchase(confirmDeleteEntry.id)
+                else deleteTransaction(confirmDeleteEntry.id)
+                setConfirmDeleteEntry(null)
+              }}>削除</Btn>
             </div>
           </div>
         </div>

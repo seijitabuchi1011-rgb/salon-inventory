@@ -103,6 +103,7 @@ interface AppState {
   deleteTransfer: (id: string) => void
   staffPurchases: StaffPurchase[]
   addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
+  deleteStaffPurchase: (id: string) => void
   staffPayments: StaffPayment[]
   addStaffPayment: (p: Omit<StaffPayment, 'id' | 'timestamp'>) => void
   deleteStaffPayment: (id: string) => void
@@ -1112,6 +1113,8 @@ export const useAppStore = create<AppState>()(
             ...state.staffPurchases,
           ],
         })),
+      deleteStaffPurchase: (id) =>
+        set((state) => ({ staffPurchases: state.staffPurchases.filter((p) => p.id !== id) })),
       staffPayments: [],
       addStaffPayment: (p) =>
         set((state) => ({
