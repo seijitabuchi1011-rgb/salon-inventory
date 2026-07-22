@@ -24,6 +24,7 @@ type ModalState = {
   minStock: number
   active: boolean
   quantity: number
+  dispensedBy: string
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
@@ -71,6 +72,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
       minStock: s?.minStock ?? 3,
       active: s?.active ?? true,
       quantity: 1,
+      dispensedBy: '',
     })
   }
 
@@ -80,7 +82,13 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
       ? modal.currentStock + modal.quantity
       : Math.max(0, modal.currentStock - modal.quantity)
     upsertStock({ productId: modal.productId, storeId: modal.storeId, currentStock: newStock, minStock: modal.minStock, active: modal.active })
-    addTransaction({ type: isReceive ? 'receive' : 'dispense', productId: modal.productId, storeId: modal.storeId, quantity: modal.quantity })
+    addTransaction({
+      type: isReceive ? 'receive' : 'dispense',
+      productId: modal.productId,
+      storeId: modal.storeId,
+      quantity: modal.quantity,
+      ...((!isReceive && modal.dispensedBy) ? { dispensedBy: modal.dispensedBy } : {}),
+    })
     const notifyThisStore = appSettings.notifyLowStockByStore?.[modal.storeId] ?? appSettings.notifyLowStock
     if (!isReceive && notifyThisStore && newStock <= modal.minStock) {
       sendNotification(
@@ -357,6 +365,19 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                 )}
               </p>
             </div>
+
+            {/* 払出し時のみ：卸した人 */}
+            {!isReceive && (
+              <div>
+                <p className="text-xs font-semibold text-muted mb-2">卸した人 <span className="font-normal text-faint">（省略可）</span></p>
+                <input
+                  value={modal.dispensedBy}
+                  onChange={(e) => setModal((m) => m && { ...m, dispensedBy: e.target.value })}
+                  placeholder="名前を入力すると購入履歴に記録"
+                  className="w-full h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-danger"
+                />
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Btn variant="ghost" className="flex-1" onClick={() => setModal(null)}>

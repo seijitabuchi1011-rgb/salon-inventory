@@ -65,6 +65,7 @@ export interface Transaction {
   quantity: number
   relatedStoreId?: StoreId
   timestamp: number
+  dispensedBy?: string  // 卸した人（払出し時に記録）
 }
 
 export interface TransferItem {
