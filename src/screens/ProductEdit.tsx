@@ -76,7 +76,6 @@ export function ProductEdit() {
   const [dealer, setDealer] = useState(existing?.dealer ?? '')
   const [dealerRep, setDealerRep] = useState(existing?.dealerRep ?? '')
   const [image, setImage] = useState(existing?.image ?? '')
-  const [uploading, setUploading] = useState(false)
   const [savedToast, setSavedToast] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -134,8 +133,7 @@ export function ProductEdit() {
     e.target.value = ''
   }
 
-  async function doSave(productId: string) {
-    // 商品データを先に保存（画像の成否に関わらず必ず実行）
+  function doSave(productId: string) {
     upsertProduct({
       id: productId, name, category, maker, barcode,
       purchasePrice: Number(purchasePrice) || 0,
@@ -150,8 +148,7 @@ export function ProductEdit() {
       const ss = storeStocks[sid] ?? { currentStock: 0, minStock: 3, active: true }
       upsertStock({ productId, storeId: sid, currentStock: ss.currentStock, minStock: ss.minStock, active: ss.active })
     })
-
-    // 画像は別途 Firestore に保存（失敗しても商品データは保存済み）
+    // 画像は非同期でバックグラウンド同期（失敗しても商品データは保存済み）
     if (image?.startsWith('data:')) {
       writeProductImage(productId, image).catch((e) => console.warn('[画像同期失敗]', e))
     } else if (!image && existing) {
@@ -159,32 +156,22 @@ export function ProductEdit() {
     }
   }
 
-  const handleSave = async () => {
-    setUploading(true)
-    try {
-      await doSave(existing?.id ?? String(Date.now()))
-      goBack()
-    } finally {
-      setUploading(false)
-    }
+  const handleSave = () => {
+    doSave(existing?.id ?? String(Date.now()))
+    goBack()
   }
 
-  const handleSaveAndNext = async () => {
+  const handleSaveAndNext = () => {
     if (!name.trim()) { nameInputRef.current?.focus(); return }
-    setUploading(true)
-    try {
-      await doSave(String(Date.now()))
-      setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
-      setMemo(''); setImage('')
-      setStoreStocks((prev) =>
-        Object.fromEntries(Object.entries(prev).map(([sid, ss]) => [sid, { ...ss, currentStock: 0 }]))
-      )
-      setSavedToast(true)
-      setTimeout(() => setSavedToast(false), 1800)
-      setTimeout(() => nameInputRef.current?.focus(), 50)
-    } finally {
-      setUploading(false)
-    }
+    doSave(String(Date.now()))
+    setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
+    setMemo(''); setImage('')
+    setStoreStocks((prev) =>
+      Object.fromEntries(Object.entries(prev).map(([sid, ss]) => [sid, { ...ss, currentStock: 0 }]))
+    )
+    setSavedToast(true)
+    setTimeout(() => setSavedToast(false), 1800)
+    setTimeout(() => nameInputRef.current?.focus(), 50)
   }
 
   return (
@@ -197,15 +184,11 @@ export function ProductEdit() {
         showStoreSwitch={false}
         right={
           <div className="flex gap-2">
-            <Btn variant="ghost" size="sm" onClick={goBack} disabled={uploading}>キャンセル</Btn>
+            <Btn variant="ghost" size="sm" onClick={goBack}>キャンセル</Btn>
             {!existing && (
-              <Btn variant="ghost" size="sm" onClick={handleSaveAndNext} disabled={uploading}>
-                {uploading ? '...' : '＋ 次へ'}
-              </Btn>
+              <Btn variant="ghost" size="sm" onClick={handleSaveAndNext}>＋ 次へ</Btn>
             )}
-            <Btn variant="primary" size="sm" onClick={handleSave} disabled={uploading}>
-              {uploading ? '保存中...' : '✓ 保存'}
-            </Btn>
+            <Btn variant="primary" size="sm" onClick={handleSave}>✓ 保存</Btn>
           </div>
         }
       />
@@ -226,7 +209,7 @@ export function ProductEdit() {
                     onChange={handleImageFile}
                   />
                   <div
-                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    onClick={() => fileInputRef.current?.click()}
                     className="relative h-48 rounded-md border border-dashed border-border-strong flex flex-col items-center justify-center gap-2 cursor-pointer active:opacity-70 overflow-hidden"
                     style={image ? {} : { background: 'repeating-linear-gradient(45deg, #F1F1EE 0 8px, #E8E8E4 8px 16px)' }}
                   >
@@ -237,12 +220,6 @@ export function ProductEdit() {
                         <span className="text-2xl text-muted">＋</span>
                         <span className="text-sm text-muted">タップして画像を追加</span>
                       </>
-                    )}
-                    {uploading && (
-                      <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
-                        <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span className="text-xs text-white font-semibold">アップロード中...</span>
-                      </div>
                     )}
                   </div>
                   {image && (
