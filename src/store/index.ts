@@ -85,6 +85,7 @@ interface AppState {
   upsertProduct: (product: Product) => void
   upsertStock: (stock: StoreStock) => void
   deleteProduct: (id: string) => void
+  bulkDeleteProducts: (ids: string[]) => void
   reorderProducts: (activeId: string, overId: string) => void
   bulkUpdateCategory: (ids: string[], category: string) => void
   bulkUpdateStocks: (
@@ -979,6 +980,14 @@ export const useAppStore = create<AppState>()(
           products: state.products.filter((p) => p.id !== id),
           stocks: state.stocks.filter((s) => s.productId !== id),
         })),
+      bulkDeleteProducts: (ids) =>
+        set((state) => {
+          const idSet = new Set(ids)
+          return {
+            products: state.products.filter((p) => !idSet.has(p.id)),
+            stocks: state.stocks.filter((s) => !idSet.has(s.productId)),
+          }
+        }),
       reorderProducts: (activeId, overId) =>
         set((state) => {
           const from = state.products.findIndex((p) => p.id === activeId)

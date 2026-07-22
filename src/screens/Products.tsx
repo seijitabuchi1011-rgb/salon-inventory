@@ -177,7 +177,7 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { currentStore, products, stocks, upsertStock, deleteProduct, reorderProducts, bulkUpdateCategory } = useAppStore()
+  const { currentStore, products, stocks, upsertStock, deleteProduct, bulkDeleteProducts, reorderProducts, bulkUpdateCategory } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
@@ -436,7 +436,7 @@ export function Products() {
               </button>
               <button
                 onClick={() => {
-                  selectedIds.forEach((id) => deleteProduct(id))
+                  bulkDeleteProducts(Array.from(selectedIds))
                   setSelectedIds(new Set())
                   setBulkCategory('')
                   setConfirmBulkDelete(false)
