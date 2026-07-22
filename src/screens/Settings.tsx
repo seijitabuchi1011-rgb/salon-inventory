@@ -5,6 +5,7 @@ import { Card } from '../components/Card'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import { writeToFirestore } from '../lib/firestore'
 import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
 
@@ -126,7 +127,7 @@ function parseCSVRow(line: string): string[] {
 
 export function Settings() {
   const {
-    products, stocks, transactions, staffPurchases,
+    products, stocks, transactions, transfers, staffPurchases, staffPayments,
     storeInfo, storeOrder, setStoreInfo, addStore, removeStore,
     appSettings, setAppSettings,
     staffMembers, addStaffMember, removeStaffMember,
@@ -134,7 +135,9 @@ export function Settings() {
     makers, addMaker, removeMaker,
     dealers, addDealer, removeDealer,
     dealerReps, addDealerRep, removeDealerRep,
+    stocktakeSnapshots,
     upsertProduct,
+    loadFromFirestore,
   } = useAppStore()
 
   const [section, setSection] = useState<Section>('店舗設定')
@@ -394,6 +397,68 @@ export function Settings() {
       ]
     })
     downloadCSV(`スタッフ購入履歴_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows])
+  }
+
+  // === 全データバックアップ / 復元 ===
+  const jsonImportRef = useRef<HTMLInputElement>(null)
+  const [cloudSaving, setCloudSaving] = useState(false)
+
+  function exportAllJson() {
+    const data = {
+      version: 9,
+      exportedAt: new Date().toISOString(),
+      products: products.map(({ image: _img, ...rest }) => rest),
+      stocks, transactions, transfers,
+      staffPurchases, staffPayments, staffMembers,
+      storeInfo, storeOrder, appSettings, stocktakeSnapshots,
+      categories, makers, dealers, dealerReps,
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `salon-backup_${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('バックアップを保存しました')
+  }
+
+  function importAllJson(file: File) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string)
+        if (!data.products || !Array.isArray(data.products)) {
+          showToast('ファイルの形式が正しくありません')
+          return
+        }
+        loadFromFirestore(data)
+        showToast(`復元しました（商品 ${data.products.length} 件）`)
+      } catch {
+        showToast('読み込みに失敗しました')
+      }
+      if (jsonImportRef.current) jsonImportRef.current.value = ''
+    }
+    reader.readAsText(file)
+  }
+
+  async function saveToCloud() {
+    setCloudSaving(true)
+    try {
+      await writeToFirestore({
+        products, stocks, transactions, transfers,
+        staffPurchases, staffPayments, staffMembers,
+        storeInfo, storeOrder, appSettings, stocktakeSnapshots,
+        categories, makers, dealers, dealerReps,
+      })
+      localStorage.setItem('salon-inventory-last-write', Date.now().toString())
+      showToast('クラウドに保存しました ✓')
+    } catch (e) {
+      console.error('[手動クラウド保存]', e)
+      showToast('クラウド保存に失敗しました。Firebaseのルールを確認してください。')
+    } finally {
+      setCloudSaving(false)
+    }
   }
 
   const inputCls = 'w-36 md:w-44 h-9 border border-border-strong rounded-md px-3 text-sm outline-none focus:border-accent bg-surface text-text'
@@ -807,6 +872,40 @@ export function Settings() {
               {section === 'データ管理' && (
                 <>
                   <h2 className="text-lg font-bold">データ管理</h2>
+
+                  {/* 全データバックアップ */}
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-3">全データバックアップ（推奨）</p>
+                    <Row label="JSONで全データ保存" sub="商品・在庫・履歴をすべてファイルに書き出し">
+                      <Btn variant="primary" size="sm" onClick={exportAllJson}>↓ バックアップ</Btn>
+                    </Row>
+                    <Row label="JSONからデータ復元" sub="バックアップファイルから全データを復元">
+                      <Btn variant="ghost" size="sm" onClick={() => jsonImportRef.current?.click()}>↑ 復元</Btn>
+                    </Row>
+                    <input
+                      ref={jsonImportRef}
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) importAllJson(f) }}
+                    />
+                    <p className="text-xs text-faint mt-2 leading-relaxed">
+                      データが消えた・別の端末に移行したい場合はJSONバックアップをご利用ください。
+                    </p>
+                  </Card>
+
+                  {/* クラウド同期 */}
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-3">クラウド同期</p>
+                    <Row label="今すぐクラウドに保存" sub="現在のデータをFirestoreに即時保存">
+                      <Btn variant="ghost" size="sm" onClick={saveToCloud} disabled={cloudSaving}>
+                        {cloudSaving ? '保存中...' : '☁ 保存'}
+                      </Btn>
+                    </Row>
+                    <p className="text-xs text-faint mt-2 leading-relaxed">
+                      通常は自動でクラウドに保存されます。失敗した場合はこのボタンをお試しください。
+                    </p>
+                  </Card>
 
                   {/* CSVインポート */}
                   <Card>
