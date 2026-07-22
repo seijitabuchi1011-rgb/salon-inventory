@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import { initializeFirestore, persistentLocalCache } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCZoTkiVOCO4gHoiBRAfxTZ77qm-jk8Fks',
@@ -11,4 +11,10 @@ const firebaseConfig = {
 }
 
 export const app = initializeApp(firebaseConfig)
-export const db = getFirestore(app)
+
+// IndexedDBによるオフライン永続化を有効化:
+// 削除等の書き込みがIndexedDBにキャッシュされるため、
+// ページ更新後も正しいデータが読み込まれる
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache(),
+})
