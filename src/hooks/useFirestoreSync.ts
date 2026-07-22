@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { subscribeToFirestore, subscribeToProductImages, writeToFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
+// localStorage に最後の成功した書き込み時刻を保存するキー
+const LAST_WRITE_KEY = 'salon-inventory-last-write'
+
 export function useFirestoreSync() {
   const {
     products, stocks, transactions, transfers,
@@ -12,32 +15,45 @@ export function useFirestoreSync() {
     loadFromFirestore,
   } = useAppStore()
 
-  const [firestoreConfirmed, setFirestoreConfirmed] = useState(false)
-  // ローカル変更がある場合にFirestoreの上書きをブロックする期限
-  const localDirtyUntil = useRef(0)
-  // Firestoreの読み込み直後の書き込みブロック期限
-  const writeBlockedUntil = useRef(0)
+  const [firestoreReady, setFirestoreReady] = useState(false)
+  const initialLoadDone = useRef(false)
 
   useEffect(() => {
     const unsubscribe = subscribeToFirestore({
       onData: (data) => {
-        // ローカルに未保存の変更がある間はFirestoreの古いデータで上書きしない
-        if (Date.now() < localDirtyUntil.current) {
-          setFirestoreConfirmed(true)
-          return
+        if (!initialLoadDone.current) {
+          initialLoadDone.current = true
+
+          const localProducts = useAppStore.getState().products
+          const lastWrite = parseInt(localStorage.getItem(LAST_WRITE_KEY) ?? '0')
+          const recentlySynced = Date.now() - lastWrite < 5 * 60 * 1000 // 5分以内に書き込み成功
+
+          if (localProducts.length === 0) {
+            // ローカルにデータなし → Firestoreから初期化
+            loadFromFirestore(data)
+          } else if (!recentlySynced) {
+            // 5分以上書き込みが成功していない → Firestoreが最新の可能性
+            // Firestoreのデータ量が多い場合のみ上書き（他デバイスで追加された可能性）
+            const firestoreCount = (data.products ?? []).length
+            if (firestoreCount > localProducts.length) {
+              loadFromFirestore(data)
+            }
+          }
+          // recentlySynced かつ localProducts あり → ローカルが最新、上書きしない
         }
-        writeBlockedUntil.current = Date.now() + 2000
-        loadFromFirestore(data)
-        setFirestoreConfirmed(true)
+        // 2回目以降のスナップショット（自分の書き込みエコー等）は無視
+        setFirestoreReady(true)
       },
       onEmpty: () => {
-        setFirestoreConfirmed(true)
+        initialLoadDone.current = true
+        setFirestoreReady(true)
       },
       onError: () => {
-        // エラー時は書き込みしない
+        initialLoadDone.current = true
+        // エラーでも書き込みは続行（オフライン対応）
+        setFirestoreReady(true)
       },
     })
-
     return () => unsubscribe()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,31 +62,9 @@ export function useFirestoreSync() {
     return () => unsubscribe()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 状態変化を検知して「ローカル変更あり」フラグを立てる
-  // firestoreConfirmed 後の変化のみ対象（初期ロード除外）
-  const confirmedRef = useRef(false)
+  // 状態変化を Firestore に書き込む（1秒デバウンス）
   useEffect(() => {
-    if (!firestoreConfirmed) return
-    if (!confirmedRef.current) {
-      // 最初の confirmed 時点はスキップ（初期ロード）
-      confirmedRef.current = true
-      return
-    }
-    // ユーザー操作による変更 → ローカルをdirtyとしてマーク（5秒間）
-    localDirtyUntil.current = Date.now() + 5000
-  }, [
-    products, stocks, transactions, transfers,
-    staffPurchases, staffPayments, staffMembers, storeInfo, storeOrder, appSettings,
-    stocktakeSnapshots, categories, makers, dealers, dealerReps,
-  ]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Firestore へ書き込む（ブロック中なら終了後に自動リトライ）
-  useEffect(() => {
-    if (!firestoreConfirmed) return
-
-    const remaining = writeBlockedUntil.current - Date.now()
-    // ブロック中なら解除後に書き込む、そうでなければ 1500ms デバウンス
-    const delay = remaining > 0 ? remaining + 200 : 1500
+    if (!firestoreReady) return
 
     const timer = setTimeout(() => {
       writeToFirestore({
@@ -78,12 +72,17 @@ export function useFirestoreSync() {
         staffPurchases, staffPayments, staffMembers, storeInfo, storeOrder, appSettings,
         stocktakeSnapshots,
         categories, makers, dealers, dealerReps,
-      }).catch((e) => console.error('[Firestore write]', e))
-    }, delay)
+      })
+        .then(() => {
+          // 書き込み成功時刻を記録
+          localStorage.setItem(LAST_WRITE_KEY, Date.now().toString())
+        })
+        .catch((e) => console.error('[Firestore write]', e))
+    }, 1000)
 
     return () => clearTimeout(timer)
   }, [
-    firestoreConfirmed,
+    firestoreReady,
     products, stocks, transactions, transfers,
     staffPurchases, staffPayments, staffMembers, storeInfo, storeOrder, appSettings,
     stocktakeSnapshots,
