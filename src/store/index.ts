@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot } from '../types'
+import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot, StaffPayment } from '../types'
 
 export interface StoreInfo {
   name: string
@@ -58,6 +58,7 @@ export interface FirestoreData {
   transactions: Transaction[]
   transfers: Transfer[]
   staffPurchases: StaffPurchase[]
+  staffPayments: StaffPayment[]
   staffMembers: string[]
   storeInfo: Record<string, StoreInfo>
   storeOrder: string[]
@@ -102,6 +103,9 @@ interface AppState {
   deleteTransfer: (id: string) => void
   staffPurchases: StaffPurchase[]
   addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
+  staffPayments: StaffPayment[]
+  addStaffPayment: (p: Omit<StaffPayment, 'id' | 'timestamp'>) => void
+  deleteStaffPayment: (id: string) => void
   staffMembers: string[]
   addStaffMember: (name: string) => void
   removeStaffMember: (name: string) => void
@@ -1108,6 +1112,16 @@ export const useAppStore = create<AppState>()(
             ...state.staffPurchases,
           ],
         })),
+      staffPayments: [],
+      addStaffPayment: (p) =>
+        set((state) => ({
+          staffPayments: [
+            { ...p, id: `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() },
+            ...state.staffPayments,
+          ],
+        })),
+      deleteStaffPayment: (id) =>
+        set((state) => ({ staffPayments: state.staffPayments.filter((p) => p.id !== id) })),
       staffMembers: [],
       addStaffMember: (name) =>
         set((state) => ({
@@ -1197,6 +1211,7 @@ export const useAppStore = create<AppState>()(
             transactions: data.transactions ?? state.transactions,
             transfers: data.transfers ?? state.transfers,
             staffPurchases: data.staffPurchases ?? state.staffPurchases,
+            staffPayments: data.staffPayments ?? state.staffPayments,
             staffMembers: data.staffMembers ?? state.staffMembers,
             storeInfo: data.storeInfo ?? state.storeInfo,
             storeOrder: data.storeOrder ?? state.storeOrder,
@@ -1218,6 +1233,7 @@ export const useAppStore = create<AppState>()(
         transactions: state.transactions,
         transfers: state.transfers,
         staffPurchases: state.staffPurchases,
+        staffPayments: state.staffPayments,
         staffMembers: state.staffMembers,
         storeInfo: state.storeInfo,
         storeOrder: state.storeOrder,
@@ -1235,6 +1251,7 @@ export const useAppStore = create<AppState>()(
         const transactions = (saved.transactions as Transaction[] | undefined) ?? []
         const transfers = (saved.transfers as Transfer[] | undefined) ?? []
         const staffPurchases = (saved.staffPurchases as StaffPurchase[] | undefined) ?? []
+        const staffPayments = (saved.staffPayments as StaffPayment[] | undefined) ?? []
         const staffMembers = (saved.staffMembers as string[] | undefined) ?? []
         const stocktakeSnapshots = (saved.stocktakeSnapshots as StocktakeSnapshot[] | undefined) ?? []
         const categories = (saved.categories as string[] | undefined) ?? DEFAULT_CATEGORIES
@@ -1286,10 +1303,10 @@ export const useAppStore = create<AppState>()(
         }
 
         if (fromVersion < 3 && products.length === 0) {
-          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffMembers: [], storeInfo, storeOrder, appSettings, stocktakeSnapshots: [], categories, makers, dealers, dealerReps }
+          return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffPayments: [], staffMembers: [], storeInfo, storeOrder, appSettings, stocktakeSnapshots: [], categories, makers, dealers, dealerReps }
         }
 
-        return { products, stocks, transactions, transfers, staffPurchases, staffMembers, storeInfo, storeOrder, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
+        return { products, stocks, transactions, transfers, staffPurchases, staffPayments, staffMembers, storeInfo, storeOrder, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
       },
     }
   )

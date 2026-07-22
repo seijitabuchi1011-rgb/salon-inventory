@@ -127,3 +127,13 @@ export interface Staff {
   storeId: StoreId
   hireDate: string
 }
+
+export interface StaffPayment {
+  id: string
+  date: string        // YYYY-MM-DD
+  amount: number      // 支払い金額（税込）
+  staffName: string
+  storeId: StoreId
+  note?: string
+  timestamp: number
+}

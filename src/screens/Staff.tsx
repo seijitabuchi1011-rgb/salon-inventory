@@ -64,24 +64,42 @@ function getMonthPrefix(offset: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+type PaymentForm = {
+  date: string
+  amount: string
+  staffName: string
+  storeId: StoreId
+  note: string
+}
+
+const BLANK_PAYMENT = (storeId: StoreId): PaymentForm => ({
+  date: new Date().toISOString().slice(0, 10),
+  amount: '',
+  staffName: '',
+  storeId,
+  note: '',
+})
+
 // 統合エントリ型
 type UnifiedEntry = {
   id: string
   date: string
   productName: string
   category: string
-  entryType: 'purchase' | 'dispense'
+  entryType: 'purchase' | 'dispense' | 'payment'
   priceIncTax: number
   quantity: number
-  person: string       // purchasedBy or dispensedBy
-  recordedBy: string   // 記入した人（卸しは"—"）
+  person: string       // purchasedBy or dispensedBy or payer
+  recordedBy: string
   storeId: StoreId
 }
 
 export function StaffScreen() {
   const {
     products, upsertProduct, stocks, upsertStock, addTransaction,
-    staffPurchases, addStaffPurchase, staffMembers, addStaffMember,
+    staffPurchases, addStaffPurchase,
+    staffPayments, addStaffPayment, deleteStaffPayment,
+    staffMembers, addStaffMember,
     transactions, storeOrder, storeInfo,
   } = useAppStore()
 
@@ -90,6 +108,10 @@ export function StaffScreen() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'purchase' | 'dispense'>('all')
 
   const [showModal, setShowModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentForm, setPaymentForm] = useState<PaymentForm>(BLANK_PAYMENT(storeOrder[0] ?? 'flag'))
+  const [showPayerDrop, setShowPayerDrop] = useState(false)
+  const [confirmDeletePayId, setConfirmDeletePayId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(BLANK_FORM())
   const [showProductDrop, setShowProductDrop] = useState(false)
   const [showBuyerDrop, setShowBuyerDrop] = useState(false)
@@ -148,8 +170,24 @@ export function StaffScreen() {
       }
     })
 
+  // staffPayments → UnifiedEntry
+  const paymentEntries: UnifiedEntry[] = staffPayments
+    .filter((sp) => sp.date.startsWith(monthPrefix))
+    .map((sp) => ({
+      id: sp.id,
+      date: sp.date,
+      productName: sp.note || 'お支払い',
+      category: '',
+      entryType: 'payment' as const,
+      priceIncTax: sp.amount,
+      quantity: 1,
+      person: sp.staffName,
+      recordedBy: '—',
+      storeId: sp.storeId,
+    }))
+
   // 統合・ソート（日付降順）
-  const allEntries = [...purchaseEntries, ...dispenseEntries].sort((a, b) =>
+  const allEntries = [...purchaseEntries, ...dispenseEntries, ...paymentEntries].sort((a, b) =>
     b.date.localeCompare(a.date)
   )
 
@@ -160,7 +198,14 @@ export function StaffScreen() {
     return true
   })
 
-  const totalAmount = filtered.reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
+  // 残高計算（特定スタッフ選択時）
+  const staffEntries = selectedStaff === '全員' ? allEntries : allEntries.filter((e) => e.person === selectedStaff)
+  const purchaseTotal = staffEntries.filter((e) => e.entryType !== 'payment').reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
+  const paymentTotal = staffEntries.filter((e) => e.entryType === 'payment').reduce((sum, e) => sum + e.priceIncTax, 0)
+  const balance = purchaseTotal - paymentTotal
+
+  const totalAmount = filtered.filter((e) => e.entryType !== 'payment').reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
+  const totalPaid = filtered.filter((e) => e.entryType === 'payment').reduce((sum, e) => sum + e.priceIncTax, 0)
 
   // スタッフ一覧（購入者 + 卸した人）
   const allPersons = Array.from(new Set([
@@ -178,6 +223,28 @@ export function StaffScreen() {
   const recorderSuggestions = staffMembers.filter((m) =>
     m.toLowerCase().includes(form.recordedBy.toLowerCase()) && m !== form.recordedBy
   )
+
+  function openPaymentModal() {
+    setPaymentForm({
+      ...BLANK_PAYMENT(storeOrder[0] ?? 'flag'),
+      staffName: selectedStaff !== '全員' ? selectedStaff : '',
+    })
+    setShowPaymentModal(true)
+  }
+
+  function handlePaymentSubmit() {
+    const amt = Number(paymentForm.amount)
+    if (!paymentForm.staffName || !amt) return
+    if (!staffMembers.includes(paymentForm.staffName)) addStaffMember(paymentForm.staffName)
+    addStaffPayment({
+      date: paymentForm.date,
+      amount: amt,
+      staffName: paymentForm.staffName,
+      storeId: paymentForm.storeId,
+      note: paymentForm.note || undefined,
+    })
+    setShowPaymentModal(false)
+  }
 
   function openModal() {
     setForm(BLANK_FORM())
@@ -272,6 +339,7 @@ export function StaffScreen() {
               </div>
 
               <div className="flex-1" />
+              <Btn variant="ghost" size="sm" onClick={openPaymentModal}>¥ 支払い記録</Btn>
               <Btn variant="primary" size="sm" onClick={openModal}>＋ 購入追加</Btn>
             </div>
 
@@ -293,14 +361,28 @@ export function StaffScreen() {
             </div>
 
             {/* KPI */}
-            <div className="flex gap-3">
-              <div className="bg-bg rounded-lg px-4 py-2 flex flex-col">
-                <span className="text-2xs text-faint">合計金額（税込）</span>
-                <span className="text-xl font-bold text-accent">¥{totalAmount.toLocaleString()}</span>
+            <div className="flex gap-2 flex-wrap">
+              <div className="bg-bg rounded-lg px-3 py-2 flex flex-col">
+                <span className="text-2xs text-faint">購入・卸し合計</span>
+                <span className="text-lg font-bold text-text">¥{totalAmount.toLocaleString()}</span>
               </div>
-              <div className="bg-bg rounded-lg px-4 py-2 flex flex-col">
+              {totalPaid > 0 && (
+                <div className="bg-bg rounded-lg px-3 py-2 flex flex-col">
+                  <span className="text-2xs text-faint">支払い済み</span>
+                  <span className="text-lg font-bold text-ok">−¥{totalPaid.toLocaleString()}</span>
+                </div>
+              )}
+              {selectedStaff !== '全員' && (
+                <div className={`rounded-lg px-3 py-2 flex flex-col ${balance <= 0 ? 'bg-ok-soft' : 'bg-danger-soft'}`}>
+                  <span className="text-2xs text-faint">残高（未払い）</span>
+                  <span className={`text-lg font-bold ${balance <= 0 ? 'text-ok' : 'text-danger'}`}>
+                    {balance <= 0 ? '精算済み' : `¥${balance.toLocaleString()}`}
+                  </span>
+                </div>
+              )}
+              <div className="bg-bg rounded-lg px-3 py-2 flex flex-col">
                 <span className="text-2xs text-faint">件数</span>
-                <span className="text-xl font-bold text-text">{filtered.length} 件</span>
+                <span className="text-lg font-bold text-text">{filtered.filter((e) => e.entryType !== 'payment').length} 件</span>
               </div>
             </div>
           </div>
@@ -331,13 +413,15 @@ export function StaffScreen() {
                 </thead>
                 <tbody>
                   {filtered.map((e) => (
-                    <tr key={e.id} className="border-b border-border hover:bg-bg transition-colors">
+                    <tr key={e.id} className={`border-b border-border hover:bg-bg transition-colors ${e.entryType === 'payment' ? 'bg-ok-soft/30' : ''}`}>
                       <td className="px-4 py-3 text-xs text-muted font-mono">{e.date}</td>
                       <td className="px-3 py-3">
                         {e.entryType === 'purchase' ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-accent-soft text-accent">購入</span>
-                        ) : (
+                        ) : e.entryType === 'dispense' ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-danger-soft text-danger">卸し</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-ok-soft text-ok">支払</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -345,12 +429,25 @@ export function StaffScreen() {
                         <p className="text-2xs text-faint">{e.category}</p>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-bold">
-                        ¥{(e.priceIncTax * e.quantity).toLocaleString()}
-                        <span className="block text-2xs text-faint font-normal">¥{e.priceIncTax.toLocaleString()} × {e.quantity}</span>
+                        {e.entryType === 'payment' ? (
+                          <span className="text-ok">−¥{e.priceIncTax.toLocaleString()}</span>
+                        ) : (
+                          <>
+                            ¥{(e.priceIncTax * e.quantity).toLocaleString()}
+                            <span className="block text-2xs text-faint font-normal">¥{e.priceIncTax.toLocaleString()} × {e.quantity}</span>
+                          </>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-bold">{e.quantity}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold">
+                        {e.entryType === 'payment' ? '—' : e.quantity}
+                      </td>
                       <td className="px-4 py-3 text-text font-medium">{e.person || '—'}</td>
-                      <td className="px-4 py-3 text-muted">{e.recordedBy}</td>
+                      <td className="px-4 py-3 text-muted">
+                        {e.entryType === 'payment' ? (
+                          <button onClick={() => setConfirmDeletePayId(e.id)}
+                            className="text-xs text-faint hover:text-danger transition-colors">✕ 削除</button>
+                        ) : e.recordedBy}
+                      </td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <StoreDot store={e.storeId} size="sm" />
@@ -363,8 +460,8 @@ export function StaffScreen() {
                 <tfoot className="bg-bg border-t-2 border-border sticky bottom-0">
                   <tr>
                     <td colSpan={3} className="px-4 py-3 text-sm font-bold text-muted">合計</td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums text-accent">¥{totalAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums">{filtered.reduce((s, e) => s + e.quantity, 0)}</td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums text-accent">¥{(totalAmount - totalPaid).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums">{filtered.filter((e) => e.entryType !== 'payment').reduce((s, e) => s + e.quantity, 0)}</td>
                     <td colSpan={3} />
                   </tr>
                 </tfoot>
@@ -633,6 +730,106 @@ export function StaffScreen() {
             <div className="flex gap-2 justify-end">
               <Btn variant="ghost" onClick={closeModal}>キャンセル</Btn>
               <Btn variant="primary" onClick={handleSubmit} disabled={!canSubmit}>✓ 記録する</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 支払い記録モーダル */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onMouseDown={(e) => e.target === e.currentTarget && setShowPaymentModal(false)}>
+          <div className="bg-surface rounded-xl w-[400px] max-w-[95vw] shadow-xl flex flex-col gap-4 p-6">
+            <p className="text-lg font-bold">支払いを記録</p>
+            <p className="text-xs text-muted -mt-2">購入・卸し合計から相殺されます</p>
+
+            {/* 日付 */}
+            <div>
+              <label className="text-xs font-semibold text-muted mb-1.5 block">日付</label>
+              <input type="date" value={paymentForm.date}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, date: e.target.value }))}
+                className="w-full h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok" />
+            </div>
+
+            {/* スタッフ名 */}
+            <div className="relative">
+              <label className="text-xs font-semibold text-muted mb-1.5 block">誰が支払ったか</label>
+              <input value={paymentForm.staffName}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, staffName: e.target.value }))}
+                onFocus={() => setShowPayerDrop(true)}
+                onBlur={() => setTimeout(() => setShowPayerDrop(false), 150)}
+                placeholder="スタッフ名"
+                className="w-full h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok" />
+              {showPayerDrop && allPersons.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-md shadow-lg z-20 max-h-40 overflow-y-auto">
+                  {allPersons.filter((m) => m.toLowerCase().includes(paymentForm.staffName.toLowerCase())).map((m) => (
+                    <button key={m} onMouseDown={() => setPaymentForm((f) => ({ ...f, staffName: m }))}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-bg border-b border-border last:border-0">{m}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 金額 */}
+            <div>
+              <label className="text-xs font-semibold text-muted mb-1.5 block">支払い金額（税込）</label>
+              <div className="flex items-center h-12 border-2 border-border-strong rounded-md px-3 bg-surface focus-within:border-ok">
+                <span className="text-faint text-sm mr-1">¥</span>
+                <input value={paymentForm.amount}
+                  onChange={(e) => setPaymentForm((f) => ({ ...f, amount: e.target.value }))}
+                  placeholder="0" inputMode="numeric"
+                  className="flex-1 text-xl font-bold bg-transparent outline-none text-ok" />
+              </div>
+            </div>
+
+            {/* メモ */}
+            <div>
+              <label className="text-xs font-semibold text-muted mb-1.5 block">メモ（省略可）</label>
+              <input value={paymentForm.note}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, note: e.target.value }))}
+                placeholder="現金, 振込など"
+                className="w-full h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-ok" />
+            </div>
+
+            {/* 店舗 */}
+            <div>
+              <label className="text-xs font-semibold text-muted mb-1.5 block">店舗</label>
+              <div className="flex gap-2 flex-wrap">
+                {storeOrder.map((s) => {
+                  const color = storeInfo[s]?.color ?? '#888'
+                  const active = paymentForm.storeId === s
+                  return (
+                    <button key={s} type="button"
+                      onClick={() => setPaymentForm((f) => ({ ...f, storeId: s as StoreId }))}
+                      className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-md text-sm font-bold border-2 transition-colors min-w-[70px]"
+                      style={active ? { borderColor: color, backgroundColor: color, color: '#fff' } : { borderColor: 'var(--border)', color: 'var(--muted)', backgroundColor: 'var(--surface)' }}>
+                      <StoreDot store={s} size="sm" />
+                      {storeInfo[s]?.name ?? s}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Btn variant="ghost" onClick={() => setShowPaymentModal(false)}>キャンセル</Btn>
+              <Btn variant="primary" onClick={handlePaymentSubmit}
+                disabled={!paymentForm.staffName || !paymentForm.amount || Number(paymentForm.amount) <= 0}
+                className="bg-ok border-ok hover:bg-ok/90">
+                ✓ 支払いを記録
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 支払い削除確認 */}
+      {confirmDeletePayId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface rounded-xl p-6 shadow-xl flex flex-col gap-4 w-72">
+            <p className="text-base font-bold">この支払い記録を削除しますか？</p>
+            <div className="flex gap-2">
+              <Btn variant="ghost" className="flex-1" onClick={() => setConfirmDeletePayId(null)}>キャンセル</Btn>
+              <Btn variant="danger" className="flex-1" onClick={() => { deleteStaffPayment(confirmDeletePayId); setConfirmDeletePayId(null) }}>削除</Btn>
             </div>
           </div>
         </div>

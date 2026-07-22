@@ -9,10 +9,11 @@ type Step = 'product' | 'confirm'
 
 
 export function Wholesale() {
-  const { products, stocks, storeOrder, storeInfo, staffMembers, addTransaction, upsertStock, addStaffMember } = useAppStore()
+  const { products, stocks, storeOrder, storeInfo, staffMembers, categories, addTransaction, upsertStock, addStaffMember } = useAppStore()
 
   const [storeId, setStoreId] = useState<StoreId>(storeOrder[0] ?? '')
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('すべて')
   const [selected, setSelected] = useState<{ id: string; name: string; sellPrice: number; category: string } | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [staffName, setStaffName] = useState('')
@@ -23,9 +24,13 @@ export function Wholesale() {
 
   const staffRef = useRef<HTMLInputElement>(null)
 
-  const filteredProducts = search.length > 0
-    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 15)
-    : products.slice(0, 20)
+  const filteredProducts = products
+    .filter((p) => {
+      const matchCat = categoryFilter === 'すべて' || p.category === categoryFilter
+      const matchSearch = search.length === 0 || p.name.toLowerCase().includes(search.toLowerCase())
+      return matchCat && matchSearch
+    })
+    .slice(0, 30)
 
   const filteredStaff = staffMembers.filter((m) =>
     m.toLowerCase().includes(staffInput.toLowerCase())
@@ -177,6 +182,18 @@ export function Wholesale() {
                     className="mt-4 w-full h-12 rounded-xl bg-accent text-white font-bold text-base disabled:opacity-40 transition-opacity">
                     次へ → スタッフ名を入力
                   </button>
+                </div>
+              )}
+
+              {/* カテゴリタグ */}
+              {!selected && (
+                <div className="px-4 md:px-6 pb-2 flex gap-1.5 overflow-x-auto flex-shrink-0">
+                  {['すべて', ...categories].map((cat) => (
+                    <button key={cat} onClick={() => setCategoryFilter(cat)}
+                      className={`flex-shrink-0 px-3 h-7 rounded-full text-xs font-bold transition-colors ${categoryFilter === cat ? 'bg-accent text-white' : 'bg-surface text-muted border border-border'}`}>
+                      {cat}
+                    </button>
+                  ))}
                 </div>
               )}
 
