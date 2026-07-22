@@ -20,7 +20,7 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
+  const { products, stocks, transactions, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
   const visibleStores = currentStore === 'all' ? storeOrder : storeOrder.filter((id) => id === currentStore)
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
@@ -32,6 +32,14 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isReceive = tab === 'receive'
+
+  // 今月の仕入れ件数（ヘッダー表示用）
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime()
+  const thisMonthReceiveCount = transactions.filter(
+    (t) => t.type === 'receive' && t.timestamp >= monthStart && t.timestamp <= monthEnd
+  ).length
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -231,11 +239,18 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
               </div>
             )}
             {fixedMode && (
-              <p className="text-xs text-muted">
-                {isReceive
-                  ? '緑の ＋ をタップで即カウントアップ。数字をタップで任意入力'
-                  : '赤の − をタップで即カウントダウン。数字をタップで任意入力'}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted">
+                  {isReceive
+                    ? '緑の ＋ をタップで即カウントアップ。数字をタップで任意入力'
+                    : '赤の − をタップで即カウントダウン。数字をタップで任意入力'}
+                </p>
+                {isReceive && (
+                  <span className="text-xs font-bold text-ok bg-ok-soft px-2 py-1 rounded-full flex-shrink-0">
+                    今月 {thisMonthReceiveCount}件記録済
+                  </span>
+                )}
+              </div>
             )}
 
             {/* 検索 */}
