@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { subscribeToFirestore, subscribeToProductImages, writeToFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
-// localStorage に最後の成功した書き込み時刻を保存するキー
 const LAST_WRITE_KEY = 'salon-inventory-last-write'
+const LAST_MODIFIED_KEY = 'salon-inventory-last-modified'
 
 export function useFirestoreSync() {
   const {
@@ -25,23 +25,26 @@ export function useFirestoreSync() {
           initialLoadDone.current = true
 
           const localProducts = useAppStore.getState().products
+          const lastModified = parseInt(localStorage.getItem(LAST_MODIFIED_KEY) ?? '0')
           const lastWrite = parseInt(localStorage.getItem(LAST_WRITE_KEY) ?? '0')
-          const recentlySynced = Date.now() - lastWrite < 5 * 60 * 1000 // 5分以内に書き込み成功
 
+          // ローカルにデータがない場合のみFirestoreから初期化
+          // ローカルデータがある場合は「未同期の変更がある可能性」があるため上書きしない
+          // （削除した商品がFirestoreに残っていても復元させない）
           if (localProducts.length === 0) {
-            // ローカルにデータなし → Firestoreから初期化
             loadFromFirestore(data)
-          } else if (!recentlySynced) {
-            // 5分以上書き込みが成功していない → Firestoreが最新の可能性
-            // Firestoreのデータ量が多い場合のみ上書き（他デバイスで追加された可能性）
-            const firestoreCount = (data.products ?? []).length
-            if (firestoreCount > localProducts.length) {
+          } else if (lastWrite > 0 && lastWrite >= lastModified) {
+            // 直近の書き込みが成功済み（Firestoreと同期済み）→ Firestoreが最新の可能性あり
+            // 他デバイスでの追加のみ受け入れ（削除は無視）
+            const firestoreProducts = (data.products ?? []) as { id: string }[]
+            const localIds = new Set(localProducts.map((p) => p.id))
+            const hasNewFromOtherDevice = firestoreProducts.some((fp) => !localIds.has(fp.id))
+            if (hasNewFromOtherDevice) {
               loadFromFirestore(data)
             }
           }
-          // recentlySynced かつ localProducts あり → ローカルが最新、上書きしない
+          // 未同期の変更がある場合 (lastWrite < lastModified) → ローカルを優先
         }
-        // 2回目以降のスナップショット（自分の書き込みエコー等）は無視
         setFirestoreReady(true)
       },
       onEmpty: () => {
@@ -50,7 +53,6 @@ export function useFirestoreSync() {
       },
       onError: () => {
         initialLoadDone.current = true
-        // エラーでも書き込みは続行（オフライン対応）
         setFirestoreReady(true)
       },
     })
@@ -66,6 +68,10 @@ export function useFirestoreSync() {
   useEffect(() => {
     if (!firestoreReady) return
 
+    const modifiedAt = Date.now()
+    // 書き込み試行時刻を記録（書き込みが失敗しても記録され、lastWrite < lastModified になる）
+    localStorage.setItem(LAST_MODIFIED_KEY, modifiedAt.toString())
+
     const timer = setTimeout(() => {
       writeToFirestore({
         products, stocks, transactions, transfers,
@@ -74,10 +80,13 @@ export function useFirestoreSync() {
         categories, makers, dealers, dealerReps,
       })
         .then(() => {
-          // 書き込み成功時刻を記録
-          localStorage.setItem(LAST_WRITE_KEY, Date.now().toString())
+          // 書き込み成功時刻を記録（lastWrite >= lastModified になる）
+          localStorage.setItem(LAST_WRITE_KEY, modifiedAt.toString())
         })
-        .catch((e) => console.error('[Firestore write]', e))
+        .catch((e) => {
+          console.error('[Firestore write error]', e)
+          // lastWrite は更新しない → 次回ロード時に「未同期」と判断してローカルを優先
+        })
     }, 1000)
 
     return () => clearTimeout(timer)
