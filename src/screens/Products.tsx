@@ -183,6 +183,7 @@ export function Products() {
     (location.state as { category?: string } | null)?.category ?? 'すべて'
   )
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState('')
 
@@ -377,6 +378,12 @@ export function Products() {
             移動
           </button>
           <button
+            onClick={() => setConfirmBulkDelete(true)}
+            className="px-4 h-9 rounded-md bg-danger text-white text-sm font-semibold flex-shrink-0"
+          >
+            削除
+          </button>
+          <button
             onClick={() => { setSelectedIds(new Set()); setBulkCategory('') }}
             className="px-4 h-9 rounded-md border border-border text-sm text-muted flex-shrink-0"
           >
@@ -385,14 +392,16 @@ export function Products() {
         </div>
       )}
 
-      {/* 削除確認ダイアログ */}
+      {/* 削除確認ダイアログ（単体） */}
       {confirmId && (() => {
         const target = products.find((p) => p.id === confirmId)
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="bg-surface rounded-xl shadow-xl p-6 w-80 flex flex-col gap-4">
               <p className="text-sm font-bold text-text">商品を削除しますか？</p>
-              <p className="text-sm text-muted">「{target?.name}」を削除します。この操作は元に戻せません。</p>
+              <p className="text-sm text-muted">
+                {target ? `「${target.name}」を削除します。` : 'この商品を削除します。'}この操作は元に戻せません。
+              </p>
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={() => setConfirmId(null)}
@@ -411,6 +420,35 @@ export function Products() {
           </div>
         )
       })()}
+
+      {/* 一括削除確認ダイアログ */}
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-surface rounded-xl shadow-xl p-6 w-80 flex flex-col gap-4">
+            <p className="text-sm font-bold text-text">選択した商品を削除しますか？</p>
+            <p className="text-sm text-muted">{selectedIds.size}件を削除します。この操作は元に戻せません。</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmBulkDelete(false)}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted hover:bg-bg transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => {
+                  selectedIds.forEach((id) => deleteProduct(id))
+                  setSelectedIds(new Set())
+                  setBulkCategory('')
+                  setConfirmBulkDelete(false)
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-danger text-white hover:bg-danger/90 transition-colors"
+              >
+                削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
