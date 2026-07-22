@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { StoreDot } from '../components/StoreDot'
@@ -20,7 +20,7 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, transactions, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
+  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
   const visibleStores = currentStore === 'all' ? storeOrder : storeOrder.filter((id) => id === currentStore)
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
@@ -30,6 +30,16 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   const [modal, setModal] = useState<ModalState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // useSyncExternalStoreのiOS Safari問題を回避: vanillaのsubscribeで直接監視
+  const [transactions, setTransactions] = useState(() => useAppStore.getState().transactions)
+  useEffect(() => {
+    // 最新stateで初期化（mount後にstoreが更新されていた場合に対応）
+    setTransactions(useAppStore.getState().transactions)
+    return useAppStore.subscribe((state) => {
+      setTransactions(state.transactions)
+    })
+  }, [])
 
   const isReceive = tab === 'receive'
 
@@ -247,7 +257,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                 </p>
                 {isReceive && (
                   <span className="text-xs font-bold text-ok bg-ok-soft px-2 py-1 rounded-full flex-shrink-0">
-                    今月 {thisMonthReceiveCount}件記録済
+                    今月 {thisMonthReceiveCount}件 (全{transactions.length}件)
                   </span>
                 )}
               </div>

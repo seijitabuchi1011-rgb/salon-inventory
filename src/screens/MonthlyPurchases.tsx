@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Card } from '../components/Card'
@@ -42,7 +42,17 @@ const BLANK_ADD = (): AddForm => ({
 })
 
 export function MonthlyPurchases() {
-  const { transactions, products, storeOrder, storeInfo, addTransaction, deleteTransaction } = useAppStore()
+  const { products, storeOrder, storeInfo, addTransaction, deleteTransaction } = useAppStore()
+
+  // useSyncExternalStoreのiOS Safari問題を回避: vanillaのsubscribeで直接監視
+  const [transactions, setTransactions] = useState(() => useAppStore.getState().transactions)
+  useEffect(() => {
+    setTransactions(useAppStore.getState().transactions)
+    return useAppStore.subscribe((state) => {
+      setTransactions(state.transactions)
+    })
+  }, [])
+
   const [monthOffset, setMonthOffset] = useState(0)
   const [store, setStore] = useState<StoreF>('all')
   const [viewMode, setViewMode] = useState<'detail' | 'byProduct'>('detail')
