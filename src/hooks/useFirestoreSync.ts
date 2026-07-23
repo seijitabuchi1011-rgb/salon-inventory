@@ -37,20 +37,26 @@ export function useFirestoreSync() {
     return subscribeToProductImages(setProductImages)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // アプリがバックグラウンドになったとき即座にFirestoreへ保存
+  // アプリがバックグラウンド/非表示になったとき即座にFirestoreへ保存
+  // pagehide は iOS Safari のページ更新でより確実に発火する
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        if (debounceRef.current) {
-          clearTimeout(debounceRef.current)
-          debounceRef.current = null
-        }
-        writeToFirestore(stateRef.current).catch((e) =>
-          console.error('[Firestore backup on hide]', e)
-        )
+    const flush = () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+        debounceRef.current = null
       }
+      writeToFirestore(stateRef.current).catch((e) =>
+        console.error('[Firestore backup on hide]', e)
+      )
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush()
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', flush)
+    }
   }, [])
 }

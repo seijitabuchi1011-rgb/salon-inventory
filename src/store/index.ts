@@ -15,6 +15,28 @@ const safeLocalStorage = {
     try { localStorage.removeItem(name) } catch { /* ignore */ }
   },
 }
+
+// 削除済みトランザクションIDのtombstone（小さなキー、全stateより書き込み成功率が高い）
+// Firestoreから古いデータが読み込まれても、これでフィルタリングする
+const DELETED_TX_KEY = 'salon-deleted-tx-ids'
+function readDeletedTxIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(DELETED_TX_KEY) ?? '[]')) } catch { return new Set() }
+}
+function appendDeletedTxId(id: string) {
+  try {
+    const ids = readDeletedTxIds()
+    ids.add(id)
+    localStorage.setItem(DELETED_TX_KEY, JSON.stringify([...ids].slice(-300)))
+  } catch { /* QuotaExceeded → 諦める */ }
+}
+function pruneDeletedTxIds(firestoreTxIds: Set<string>) {
+  // Firestoreに既に含まれていないIDはtombstoneから除去（書き込み済み確認）
+  try {
+    const ids = readDeletedTxIds()
+    const kept = [...ids].filter(id => firestoreTxIds.has(id))
+    localStorage.setItem(DELETED_TX_KEY, JSON.stringify(kept))
+  } catch { /* ignore */ }
+}
 import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot, StaffPayment } from '../types'
 
 export interface StoreInfo {
@@ -1044,9 +1066,10 @@ export const useAppStore = create<AppState>()(
           ],
         })),
       deleteTransaction: (id) =>
-        set((state) => ({
-          transactions: state.transactions.filter((t) => t.id !== id),
-        })),
+        set((state) => {
+          appendDeletedTxId(id) // tombstoneに記録
+          return { transactions: state.transactions.filter((t) => t.id !== id) }
+        }),
       transfers: [],
       addTransfer: (t) =>
         set((state) => ({
@@ -1208,6 +1231,11 @@ export const useAppStore = create<AppState>()(
         })),
       loadFromFirestore: (data) =>
         set((state) => {
+          // Firestoreに含まれるIDでtombstoneを整理（書き込み済み確認）
+          const firestoreTxIds = new Set((data.transactions ?? []).map((t) => t.id))
+          pruneDeletedTxIds(firestoreTxIds)
+          const deletedIds = readDeletedTxIds()
+
           // 旧フォーマット（flagMinStock/notifyLowStockFlag等）からの移行を保証
           const raw = ((data.appSettings ?? {}) as unknown) as Record<string, unknown>
           const migratedSettings: AppSettings = {
@@ -1235,7 +1263,7 @@ export const useAppStore = create<AppState>()(
               image: state.products.find((lp) => lp.id === fp.id)?.image,
             })),
             stocks: data.stocks ?? state.stocks,
-            transactions: data.transactions ?? state.transactions,
+            transactions: (data.transactions ?? state.transactions).filter((t) => !deletedIds.has(t.id)),
             transfers: data.transfers ?? state.transfers,
             staffPurchases: data.staffPurchases ?? state.staffPurchases,
             staffPayments: data.staffPayments ?? state.staffPayments,
