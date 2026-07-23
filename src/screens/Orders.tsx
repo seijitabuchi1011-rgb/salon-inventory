@@ -20,7 +20,7 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, stocks, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
+  const { products, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
   const visibleStores = currentStore === 'all' ? storeOrder : storeOrder.filter((id) => id === currentStore)
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
@@ -32,11 +32,13 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // useSyncExternalStoreのiOS Safari問題を回避: vanillaのsubscribeで直接監視
+  const [stocks, setStocks] = useState(() => useAppStore.getState().stocks)
   const [transactions, setTransactions] = useState(() => useAppStore.getState().transactions)
   useEffect(() => {
-    // 最新stateで初期化（mount後にstoreが更新されていた場合に対応）
+    setStocks(useAppStore.getState().stocks)
     setTransactions(useAppStore.getState().transactions)
     return useAppStore.subscribe((state) => {
+      setStocks(state.stocks)
       setTransactions(state.transactions)
     })
   }, [])
@@ -63,7 +65,8 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
 
   // ワンタッチで ±1
   function quickUpdate(productId: string, storeId: string, delta: number) {
-    const s = getStock(productId, storeId)
+    // getState()で最新在庫を取得（iOS SafariのuseStateステール回避）
+    const s = useAppStore.getState().stocks.find((st) => st.productId === productId && st.storeId === storeId)
     const next = Math.max(0, (s?.currentStock ?? 0) + delta)
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {

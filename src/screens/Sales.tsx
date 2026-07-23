@@ -78,7 +78,8 @@ export function Sales() {
 
   // 払出 +1 / −1（入力タブ用）
   function quickDispense(productId: string, delta: number) {
-    const s = stocks.find((st) => st.productId === productId && st.storeId === inputStoreId)
+    // useAppStore.getState()で最新在庫を取得（iOS SafariのuseStateステール回避）
+    const s = useAppStore.getState().stocks.find((st) => st.productId === productId && st.storeId === inputStoreId)
     const nextStock = Math.max(0, (s?.currentStock ?? 0) + delta)
     upsertStock({ productId, storeId: inputStoreId, currentStock: nextStock, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     const pName = products.find((p) => p.id === productId)?.name ?? '商品'
