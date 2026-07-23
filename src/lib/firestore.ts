@@ -51,10 +51,10 @@ export async function readFromFirestore(): Promise<FirestoreData | null> {
   return snapshot.exists() ? (snapshot.data() as FirestoreData) : null
 }
 
-export async function writeToFirestore(data: FirestoreData): Promise<void> {
+export async function writeToFirestore(data: FirestoreData, deviceId?: string): Promise<void> {
   // 画像は product-images コレクションで管理するため、メインドキュメントからは除外
   const products = data.products.map(({ image: _img, ...rest }) => rest)
-  await setDoc(STORE_DOC, { ...data, products, lastModified: Date.now() })
+  await setDoc(STORE_DOC, { ...data, products, lastModified: Date.now(), lastModifiedBy: deviceId })
 }
 
 // --- product-images コレクション ---

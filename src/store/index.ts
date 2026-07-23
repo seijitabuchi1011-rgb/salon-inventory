@@ -106,6 +106,7 @@ export interface FirestoreData {
   dealers: string[]
   dealerReps: string[]
   lastModified?: number
+  lastModifiedBy?: string
 }
 
 interface AppState {

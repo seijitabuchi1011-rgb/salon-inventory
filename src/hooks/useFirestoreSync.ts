@@ -2,19 +2,22 @@ import { useEffect, useRef } from 'react'
 import { subscribeToProductImages, writeToFirestore, readFromFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
-const LOCAL_TS_KEY = 'salon-inventory-last-write'
+const DEVICE_ID_KEY = 'salon-inventory-device-id'
 
-function getLocalTs(): number {
-  return parseInt(localStorage.getItem(LOCAL_TS_KEY) || '0', 10)
+function getOrCreateDeviceId(): string {
+  let id = localStorage.getItem(DEVICE_ID_KEY)
+  if (!id) {
+    id = `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    localStorage.setItem(DEVICE_ID_KEY, id)
+  }
+  return id
 }
 
-function setLocalTs(ts: number) {
-  localStorage.setItem(LOCAL_TS_KEY, ts.toString())
-}
-
-async function pushToFirestore(state: ReturnType<typeof useAppStore.getState>) {
-  await writeToFirestore(state)
-  setLocalTs(Date.now())
+async function pushToFirestore(
+  state: ReturnType<typeof useAppStore.getState>,
+  deviceId: string,
+) {
+  await writeToFirestore(state, deviceId)
 }
 
 export function useFirestoreSync() {
@@ -22,8 +25,8 @@ export function useFirestoreSync() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stateRef = useRef(useAppStore.getState())
   // 起動時の初期同期が完了するまでデバウンス書き込みをブロック
-  // （完了前に古いデータでFirestoreを上書きするレースコンディションを防ぐ）
   const syncReadyRef = useRef(false)
+  const deviceId = useRef(getOrCreateDeviceId())
 
   // 状態変化を監視してFirestoreへデバウンス書き込み
   useEffect(() => {
@@ -33,50 +36,47 @@ export function useFirestoreSync() {
       if (!syncReadyRef.current) return  // 初期同期完了まで書き込み禁止
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
-        pushToFirestore(state).catch((e) => console.error('[Firestore backup]', e))
+        pushToFirestore(state, deviceId.current).catch((e) =>
+          console.error('[Firestore backup]', e)
+        )
       }, 1000)
     })
   }, [])
 
-  // 起動時: タイムスタンプ比較でどちらのデータが新しいか判定してから同期
-  // - Firestoreが新しい → 別端末で更新されているためFirestoreから読み込み
-  // - ローカルが新しい（または同じ）→ ローカルをFirestoreへ書き込み
-  // - ローカルにデータなし → Firestoreから復元
+  // 起動時: デバイスIDで「誰が最後に書いたか」を判定してから同期
+  // - 自分以外のデバイスが書いた → 別端末の最新データをFirestoreから読み込む
+  // - 自分が最後に書いた（または初回）→ ローカルをFirestoreへ書き込む
+  // - ローカルデータなし → Firestoreから復元
   useEffect(() => {
     const hasLocal = localStorage.getItem('salon-inventory-store') !== null
-    const localTs = getLocalTs()
+    const myId = deviceId.current
 
     readFromFirestore()
       .then((firestoreData) => {
-        const firestoreTs = firestoreData?.lastModified ?? 0
+        const firestoreDeviceId = firestoreData?.lastModifiedBy
 
         if (!hasLocal) {
           // ローカルデータなし → Firestoreから復元
           if (firestoreData) useAppStore.getState().loadFromFirestore(firestoreData)
-        } else if (firestoreTs > localTs + 3000) {
-          // Firestoreが3秒以上新しい → 別端末で更新されている
-          if (firestoreData) {
-            useAppStore.getState().loadFromFirestore(firestoreData)
-            setLocalTs(firestoreTs)
-          }
+        } else if (firestoreDeviceId && firestoreDeviceId !== myId) {
+          // 別端末が最後に書き込んでいる → Firestoreから読み込む
+          if (firestoreData) useAppStore.getState().loadFromFirestore(firestoreData)
         } else {
-          // ローカルが新しい（またはほぼ同時） → ローカルをFirestoreへ書き込み
-          pushToFirestore(useAppStore.getState()).catch((e) =>
+          // 自分が最後（またはFirestoreにデバイスIDなし）→ ローカルをFirestoreへ書き込む
+          pushToFirestore(useAppStore.getState(), myId).catch((e) =>
             console.error('[Firestore init push]', e)
           )
         }
       })
       .catch((e) => {
         console.error('[Firestore init read]', e)
-        // 読み込みエラー時はローカルデータをFirestoreへ書き込み
         if (hasLocal) {
-          pushToFirestore(useAppStore.getState()).catch((e2) =>
+          pushToFirestore(useAppStore.getState(), myId).catch((e2) =>
             console.error('[Firestore fallback push]', e2)
           )
         }
       })
       .finally(() => {
-        // 初期同期完了 → 以降のデバウンス書き込みを許可
         syncReadyRef.current = true
       })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -93,8 +93,8 @@ export function useFirestoreSync() {
         clearTimeout(debounceRef.current)
         debounceRef.current = null
       }
-      if (!syncReadyRef.current) return  // 初期同期前は flush しない
-      pushToFirestore(stateRef.current).catch((e) =>
+      if (!syncReadyRef.current) return
+      pushToFirestore(stateRef.current, deviceId.current).catch((e) =>
         console.error('[Firestore backup on hide]', e)
       )
     }
