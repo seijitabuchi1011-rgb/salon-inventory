@@ -67,7 +67,10 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   function quickUpdate(productId: string, storeId: string, delta: number) {
     // getState()で最新在庫を取得（iOS SafariのuseStateステール回避）
     const s = useAppStore.getState().stocks.find((st) => st.productId === productId && st.storeId === storeId)
-    const next = Math.max(0, (s?.currentStock ?? 0) + delta)
+    const currentStock = s?.currentStock ?? 0
+    const next = Math.max(0, currentStock + delta)
+    // 在庫0でマイナス押下 → 実質変化なし、トランザクション不要
+    if (next === currentStock && delta < 0) return
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {
       if (isReceive && delta < 0) {
