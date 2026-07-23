@@ -80,6 +80,16 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
           const p = products.find((pr) => pr.id === productId)
           showToast(`修正: ${p?.name ?? '商品'} −1 (仕入れ取消)`)
         }
+      } else if (!isReceive && delta > 0) {
+        // 払出しモードの修正（カウントアップ）→ 最新の払出しトランザクションを削除
+        const lastDispense = useAppStore.getState().transactions.find(
+          (t) => t.type === 'dispense' && t.productId === productId && t.storeId === storeId
+        )
+        if (lastDispense) {
+          deleteTransaction(lastDispense.id)
+          const p = products.find((pr) => pr.id === productId)
+          showToast(`修正: ${p?.name ?? '商品'} +1 (払出し取消)`)
+        }
       } else {
         try {
           addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
