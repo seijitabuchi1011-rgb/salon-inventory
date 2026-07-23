@@ -20,7 +20,7 @@ type ModalState = {
 }
 
 export function Orders({ fixedMode }: { fixedMode?: Tab }) {
-  const { products, upsertStock, addTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
+  const { products, upsertStock, addTransaction, deleteTransaction, currentStore, appSettings, storeInfo, storeOrder, categories } = useAppStore()
   const visibleStores = currentStore === 'all' ? storeOrder : storeOrder.filter((id) => id === currentStore)
   const [tabState, setTabState] = useState<Tab>('receive')
   const tab = fixedMode ?? tabState
@@ -70,16 +70,28 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     const next = Math.max(0, (s?.currentStock ?? 0) + delta)
     upsertStock({ productId, storeId, currentStock: next, minStock: s?.minStock ?? 3, active: s?.active ?? true })
     if (delta !== 0) {
-      try {
-        addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
-      } catch (e) {
-        console.error('[addTransaction]', e)
-        showToast(`記録エラー: ${e instanceof Error ? e.message.slice(0, 40) : String(e).slice(0, 40)}`)
-        return
-      }
-      if (delta > 0) {
-        const p = products.find((pr) => pr.id === productId)
-        showToast(`仕入れ記録: ${p?.name ?? '商品'} +1`)
+      if (isReceive && delta < 0) {
+        // 仕入れモードの修正（カウントダウン）→ 最新の仕入れトランザクションを削除（今月仕入高に反映しない）
+        const lastReceive = useAppStore.getState().transactions.find(
+          (t) => t.type === 'receive' && t.productId === productId && t.storeId === storeId
+        )
+        if (lastReceive) {
+          deleteTransaction(lastReceive.id)
+          const p = products.find((pr) => pr.id === productId)
+          showToast(`修正: ${p?.name ?? '商品'} −1 (仕入れ取消)`)
+        }
+      } else {
+        try {
+          addTransaction({ type: delta > 0 ? 'receive' : 'dispense', productId, storeId, quantity: Math.abs(delta) })
+        } catch (e) {
+          console.error('[addTransaction]', e)
+          showToast(`記録エラー: ${e instanceof Error ? e.message.slice(0, 40) : String(e).slice(0, 40)}`)
+          return
+        }
+        if (delta > 0) {
+          const p = products.find((pr) => pr.id === productId)
+          showToast(`仕入れ記録: ${p?.name ?? '商品'} +1`)
+        }
       }
     }
     const notifyThisStore = appSettings.notifyLowStockByStore?.[storeId] ?? appSettings.notifyLowStock
