@@ -21,12 +21,16 @@ export function useFirestoreSync() {
   const { setProductImages } = useAppStore()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stateRef = useRef(useAppStore.getState())
+  // 起動時の初期同期が完了するまでデバウンス書き込みをブロック
+  // （完了前に古いデータでFirestoreを上書きするレースコンディションを防ぐ）
+  const syncReadyRef = useRef(false)
 
   // 状態変化を監視してFirestoreへデバウンス書き込み
   useEffect(() => {
     stateRef.current = useAppStore.getState()
     return useAppStore.subscribe((state) => {
       stateRef.current = state
+      if (!syncReadyRef.current) return  // 初期同期完了まで書き込み禁止
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         pushToFirestore(state).catch((e) => console.error('[Firestore backup]', e))
@@ -49,10 +53,7 @@ export function useFirestoreSync() {
         if (!hasLocal) {
           // ローカルデータなし → Firestoreから復元
           if (firestoreData) useAppStore.getState().loadFromFirestore(firestoreData)
-          return
-        }
-
-        if (firestoreTs > localTs + 3000) {
+        } else if (firestoreTs > localTs + 3000) {
           // Firestoreが3秒以上新しい → 別端末で更新されている
           if (firestoreData) {
             useAppStore.getState().loadFromFirestore(firestoreData)
@@ -74,6 +75,10 @@ export function useFirestoreSync() {
           )
         }
       })
+      .finally(() => {
+        // 初期同期完了 → 以降のデバウンス書き込みを許可
+        syncReadyRef.current = true
+      })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 商品画像は別コレクションのため常に同期
@@ -88,6 +93,7 @@ export function useFirestoreSync() {
         clearTimeout(debounceRef.current)
         debounceRef.current = null
       }
+      if (!syncReadyRef.current) return  // 初期同期前は flush しない
       pushToFirestore(stateRef.current).catch((e) =>
         console.error('[Firestore backup on hide]', e)
       )
