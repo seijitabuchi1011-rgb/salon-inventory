@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { subscribeToProductImages, writeToFirestore, readFromFirestore } from '../lib/firestore'
+import { subscribeToProductImages, writeToFirestore, subscribeToFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
 const DEVICE_ID_KEY = 'salon-inventory-device-id'
@@ -28,12 +28,61 @@ export function useFirestoreSync() {
   const syncReadyRef = useRef(false)
   const deviceId = useRef(getOrCreateDeviceId())
 
+  // Firestoreをリアルタイム監視:
+  // - 起動時(初回): 別端末の書き込みならFirestoreから読み込む、自分の書き込みならローカルをプッシュ
+  // - 起動後(以降): 別端末からの変更を即座に反映
+  useEffect(() => {
+    const myId = deviceId.current
+    const hasLocal = localStorage.getItem('salon-inventory-store') !== null
+    let isFirstSnapshot = true
+
+    const unsubscribe = subscribeToFirestore({
+      onData: (data) => {
+        const firestoreDeviceId = (data as typeof data & { lastModifiedBy?: string }).lastModifiedBy
+
+        if (isFirstSnapshot) {
+          isFirstSnapshot = false
+          if (!hasLocal || (firestoreDeviceId && firestoreDeviceId !== myId)) {
+            // ローカルなし、または別端末の書き込み → Firestoreから読み込む
+            useAppStore.getState().loadFromFirestore(data)
+          } else {
+            // 自分の書き込み(またはdeviceIdなし) → ローカルをFirestoreへ書き込む
+            pushToFirestore(useAppStore.getState(), myId)
+              .catch((e) => console.error('[Firestore init push]', e))
+          }
+          syncReadyRef.current = true
+          return
+        }
+
+        // 2回目以降: 別端末からのリアルタイム更新のみ反映
+        if (firestoreDeviceId && firestoreDeviceId !== myId) {
+          useAppStore.getState().loadFromFirestore(data)
+        }
+      },
+      onEmpty: () => {
+        isFirstSnapshot = false
+        // Firestoreにデータなし → ローカルをアップロード
+        if (hasLocal) {
+          pushToFirestore(useAppStore.getState(), myId)
+            .catch((e) => console.error('[Firestore init push empty]', e))
+        }
+        syncReadyRef.current = true
+      },
+      onError: () => {
+        isFirstSnapshot = false
+        syncReadyRef.current = true
+      },
+    })
+
+    return unsubscribe
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // 状態変化を監視してFirestoreへデバウンス書き込み
   useEffect(() => {
     stateRef.current = useAppStore.getState()
     return useAppStore.subscribe((state) => {
       stateRef.current = state
-      if (!syncReadyRef.current) return  // 初期同期完了まで書き込み禁止
+      if (!syncReadyRef.current) return
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         pushToFirestore(state, deviceId.current).catch((e) =>
@@ -42,44 +91,6 @@ export function useFirestoreSync() {
       }, 1000)
     })
   }, [])
-
-  // 起動時: デバイスIDで「誰が最後に書いたか」を判定してから同期
-  // - 自分以外のデバイスが書いた → 別端末の最新データをFirestoreから読み込む
-  // - 自分が最後に書いた（または初回）→ ローカルをFirestoreへ書き込む
-  // - ローカルデータなし → Firestoreから復元
-  useEffect(() => {
-    const hasLocal = localStorage.getItem('salon-inventory-store') !== null
-    const myId = deviceId.current
-
-    readFromFirestore()
-      .then((firestoreData) => {
-        const firestoreDeviceId = firestoreData?.lastModifiedBy
-
-        if (!hasLocal) {
-          // ローカルデータなし → Firestoreから復元
-          if (firestoreData) useAppStore.getState().loadFromFirestore(firestoreData)
-        } else if (firestoreDeviceId && firestoreDeviceId !== myId) {
-          // 別端末が最後に書き込んでいる → Firestoreから読み込む
-          if (firestoreData) useAppStore.getState().loadFromFirestore(firestoreData)
-        } else {
-          // 自分が最後（またはFirestoreにデバイスIDなし）→ ローカルをFirestoreへ書き込む
-          pushToFirestore(useAppStore.getState(), myId).catch((e) =>
-            console.error('[Firestore init push]', e)
-          )
-        }
-      })
-      .catch((e) => {
-        console.error('[Firestore init read]', e)
-        if (hasLocal) {
-          pushToFirestore(useAppStore.getState(), myId).catch((e2) =>
-            console.error('[Firestore fallback push]', e2)
-          )
-        }
-      })
-      .finally(() => {
-        syncReadyRef.current = true
-      })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 商品画像は別コレクションのため常に同期
   useEffect(() => {
