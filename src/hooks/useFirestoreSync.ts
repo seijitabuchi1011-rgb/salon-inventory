@@ -1,70 +1,34 @@
 import { useEffect, useRef } from 'react'
-import { subscribeToProductImages, writeToFirestore, readFromFirestore } from '../lib/firestore'
+import { subscribeToProductImages, writeToFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
-// ローカル変更タイムスタンプ（Firestoreに未同期の変更があるか判定に使用）
-const LOCAL_TS_KEY = 'salon-local-ts'
-const SYNC_TS_KEY = 'salon-sync-ts'
-
-function getTs(key: string) {
-  try { return parseInt(localStorage.getItem(key) ?? '0') } catch { return 0 }
-}
-function setTs(key: string, ts: number) {
-  try { localStorage.setItem(key, ts.toString()) } catch {}
-}
-
 export function useFirestoreSync() {
-  const { setProductImages, loadFromFirestore } = useAppStore()
+  const { setProductImages } = useAppStore()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // useEffectが実行される時点ではZustand persistの水和が完了しているため
+  // 初期値はここではなくsubscribeのeffect内で設定する
   const stateRef = useRef(useAppStore.getState())
-  // loadFromFirestore 呼び出し中はローカルTSを更新しない
-  const isApplyingFirestore = useRef(false)
 
-  // ストア変更を監視 → Firestoreにバックアップ（デバウンス1秒）
+  // useSyncExternalStoreのiOS Safari問題を回避: vanillaのsubscribeで直接監視
   useEffect(() => {
+    // この時点でpersist水和が完了しているため正確なローカル状態を取得
+    stateRef.current = useAppStore.getState()
     return useAppStore.subscribe((state) => {
       stateRef.current = state
-      // Firestoreロード中の状態変化はローカル変更として扱わない
-      if (!isApplyingFirestore.current) {
-        setTs(LOCAL_TS_KEY, Date.now())
-      }
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
-        const ts = Date.now()
-        writeToFirestore(state)
-          .then(() => setTs(SYNC_TS_KEY, ts))
-          .catch((e) => console.error('[Firestore backup]', e))
+        writeToFirestore(state).catch((e) => console.error('[Firestore backup]', e))
       }, 1000)
     })
   }, [])
 
-  // 起動時: ローカルに未同期の変更があれば Firestore へ書き込み、なければ Firestore から読み込む
+  // 起動時: ローカルの状態をFirestoreに書き込む
+  // （前回リロード時の書き込みが未完了だった場合の保護）
+  // ※ Firestoreから読み込むとlocalStorageの新しいデータを上書きするため読み込みは行わない
+  // ※ 別端末から最新データを取得したい場合は設定画面の「クラウドから読み込み」ボタンを使用
   useEffect(() => {
-    const localTs = getTs(LOCAL_TS_KEY)
-    const syncTs = getTs(SYNC_TS_KEY)
-
-    if (localTs > syncTs) {
-      // ローカルの方が新しい（前回リロード時にFirestore書き込みが未完了だった）
-      // → ローカルデータをFirestoreに書き込んで正として扱う
-      writeToFirestore(stateRef.current)
-        .then(() => setTs(SYNC_TS_KEY, localTs))
-        .catch((e) => console.error('[Firestore init push]', e))
-      return
-    }
-
-    // Firestoreが最新 → 読み込み（別端末からの変更を取得）
-    isApplyingFirestore.current = true
-    readFromFirestore()
-      .then((data) => {
-        if (data) {
-          loadFromFirestore(data)
-          const ts = Date.now()
-          setTs(LOCAL_TS_KEY, ts)
-          setTs(SYNC_TS_KEY, ts)
-        }
-      })
-      .catch((e) => console.error('[Firestore init]', e))
-      .finally(() => { isApplyingFirestore.current = false })
+    writeToFirestore(useAppStore.getState())
+      .catch((e) => console.error('[Firestore init push]', e))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 商品画像は別コレクションのため常に同期
@@ -79,10 +43,9 @@ export function useFirestoreSync() {
         clearTimeout(debounceRef.current)
         debounceRef.current = null
       }
-      const localTs = getTs(LOCAL_TS_KEY)
-      writeToFirestore(stateRef.current)
-        .then(() => setTs(SYNC_TS_KEY, localTs))
-        .catch((e) => console.error('[Firestore backup on hide]', e))
+      writeToFirestore(stateRef.current).catch((e) =>
+        console.error('[Firestore backup on hide]', e)
+      )
     }
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') flush()
@@ -94,4 +57,5 @@ export function useFirestoreSync() {
       window.removeEventListener('pagehide', flush)
     }
   }, [])
+
 }

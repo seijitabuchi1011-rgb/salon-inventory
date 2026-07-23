@@ -5,7 +5,7 @@ import { Card } from '../components/Card'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
-import { writeToFirestore } from '../lib/firestore'
+import { writeToFirestore, readFromFirestore } from '../lib/firestore'
 import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
 
@@ -402,6 +402,7 @@ export function Settings() {
   // === 全データバックアップ / 復元 ===
   const jsonImportRef = useRef<HTMLInputElement>(null)
   const [cloudSaving, setCloudSaving] = useState(false)
+  const [cloudLoading, setCloudLoading] = useState(false)
 
   function exportAllJson() {
     const data = {
@@ -458,6 +459,25 @@ export function Settings() {
       showToast('クラウド保存に失敗しました。Firebaseのルールを確認してください。')
     } finally {
       setCloudSaving(false)
+    }
+  }
+
+  async function loadFromCloud() {
+    if (!window.confirm('クラウドのデータで現在のデータを上書きします。よろしいですか？')) return
+    setCloudLoading(true)
+    try {
+      const data = await readFromFirestore()
+      if (data) {
+        loadFromFirestore(data)
+        showToast('クラウドから読み込みました ✓')
+      } else {
+        showToast('クラウドにデータがありません')
+      }
+    } catch (e) {
+      console.error('[クラウド読み込み]', e)
+      showToast('クラウドからの読み込みに失敗しました')
+    } finally {
+      setCloudLoading(false)
     }
   }
 
@@ -900,6 +920,11 @@ export function Settings() {
                     <Row label="今すぐクラウドに保存" sub="現在のデータをFirestoreに即時保存">
                       <Btn variant="ghost" size="sm" onClick={saveToCloud} disabled={cloudSaving}>
                         {cloudSaving ? '保存中...' : '☁ 保存'}
+                      </Btn>
+                    </Row>
+                    <Row label="クラウドから読み込み" sub="別の端末で保存したデータを取得（現在のデータは上書きされます）">
+                      <Btn variant="ghost" size="sm" onClick={loadFromCloud} disabled={cloudLoading}>
+                        {cloudLoading ? '読込中...' : '☁ 読込'}
                       </Btn>
                     </Row>
                     <p className="text-xs text-faint mt-2 leading-relaxed">
