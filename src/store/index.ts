@@ -105,6 +105,7 @@ export interface FirestoreData {
   makers: string[]
   dealers: string[]
   dealerReps: string[]
+  lastModified?: number
 }
 
 interface AppState {

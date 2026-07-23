@@ -54,7 +54,7 @@ export async function readFromFirestore(): Promise<FirestoreData | null> {
 export async function writeToFirestore(data: FirestoreData): Promise<void> {
   // 画像は product-images コレクションで管理するため、メインドキュメントからは除外
   const products = data.products.map(({ image: _img, ...rest }) => rest)
-  await setDoc(STORE_DOC, { ...data, products })
+  await setDoc(STORE_DOC, { ...data, products, lastModified: Date.now() })
 }
 
 // --- product-images コレクション ---
