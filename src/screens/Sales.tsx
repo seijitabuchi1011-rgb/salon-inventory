@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Card } from '../components/Card'
@@ -9,7 +9,7 @@ import type { StoreId } from '../types'
 
 type Period = '今日' | '今週' | '今月' | '先月'
 type StoreF = 'all' | StoreId
-type ViewMode = 'summary' | 'detail'
+type ViewMode = 'summary' | 'detail' | 'input'
 
 function fmt(n: number) {
   return n >= 10000 ? `¥${(n / 10000).toFixed(1)}万` : `¥${n.toLocaleString()}`
@@ -46,7 +46,15 @@ const BLANK_ADD = (defaultStore: StoreId): AddForm => ({
 })
 
 export function Sales() {
-  const { transactions, products, stocks, upsertStock, addTransaction, deleteTransaction, storeOrder, storeInfo } = useAppStore()
+  const { products, stocks, upsertStock, addTransaction, deleteTransaction, storeOrder, storeInfo } = useAppStore()
+
+  // useSyncExternalStoreのiOS Safari問題を回避
+  const [transactions, setTransactions] = useState(() => useAppStore.getState().transactions)
+  useEffect(() => {
+    setTransactions(useAppStore.getState().transactions)
+    return useAppStore.subscribe((state) => setTransactions(state.transactions))
+  }, [])
+
   const [period, setPeriod] = useState<Period>('今月')
   const [store, setStore] = useState<StoreF>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('summary')
@@ -54,6 +62,40 @@ export function Sales() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [form, setForm] = useState<AddForm>(BLANK_ADD(storeOrder[0] ?? 'flag'))
   const [showDrop, setShowDrop] = useState(false)
+  const [inputSearch, setInputSearch] = useState('')
+  const [inputCategory, setInputCategory] = useState('すべて')
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function showToast(msg: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast(msg)
+    toastTimer.current = setTimeout(() => setToast(null), 2000)
+  }
+
+  // 払出入力で使う店舗（全店選択時は先頭店舗）
+  const inputStoreId: StoreId = (store !== 'all' ? store : storeOrder[0] ?? 'flag') as StoreId
+
+  // 払出 +1 / −1（入力タブ用）
+  function quickDispense(productId: string, delta: number) {
+    const s = stocks.find((st) => st.productId === productId && st.storeId === inputStoreId)
+    const nextStock = Math.max(0, (s?.currentStock ?? 0) + delta)
+    upsertStock({ productId, storeId: inputStoreId, currentStock: nextStock, minStock: s?.minStock ?? 3, active: s?.active ?? true })
+    const pName = products.find((p) => p.id === productId)?.name ?? '商品'
+    if (delta < 0) {
+      addTransaction({ type: 'dispense', productId, storeId: inputStoreId, quantity: 1 })
+      showToast(`払出: ${pName} −1`)
+    } else {
+      // 最新の払出トランザクションを1件取消
+      const last = [...transactions]
+        .filter((t) => t.type === 'dispense' && t.productId === productId && t.storeId === inputStoreId)
+        .sort((a, b) => b.timestamp - a.timestamp)[0]
+      if (last) {
+        deleteTransaction(last.id)
+        showToast(`払出取消: ${pName} +1`)
+      }
+    }
+  }
 
   const dispenses = transactions.filter((t) => t.type === 'dispense')
 
@@ -188,6 +230,10 @@ export function Sales() {
                   className={`px-3 h-8 text-xs font-bold transition-colors ${viewMode === 'summary' ? 'bg-accent text-white' : 'bg-surface text-muted'}`}>
                   概要
                 </button>
+                <button onClick={() => setViewMode('input')}
+                  className={`px-3 h-8 text-xs font-bold border-l border-border transition-colors ${viewMode === 'input' ? 'bg-accent text-white' : 'bg-surface text-muted'}`}>
+                  入力
+                </button>
                 <button onClick={() => setViewMode('detail')}
                   className={`px-3 h-8 text-xs font-bold border-l border-border transition-colors ${viewMode === 'detail' ? 'bg-accent text-white' : 'bg-surface text-muted'}`}>
                   明細
@@ -306,6 +352,88 @@ export function Sales() {
             </div>
           )}
 
+          {/* ======== 入力タブ ======== */}
+          {viewMode === 'input' && (() => {
+            const allCategories = ['すべて', ...Array.from(new Set(products.map((p) => p.category)))]
+            const inputProducts = products.filter((p) => {
+              const s = stocks.find((st) => st.productId === p.id && st.storeId === inputStoreId)
+              if (!s?.active) return false
+              if (inputCategory !== 'すべて' && p.category !== inputCategory) return false
+              if (inputSearch && !p.name.toLowerCase().includes(inputSearch.toLowerCase())) return false
+              return true
+            })
+            // 今月の払出カウント（入力店舗 × 各商品）
+            const now2 = new Date()
+            const mStart = new Date(now2.getFullYear(), now2.getMonth(), 1).getTime()
+            const dispenseCount = (productId: string) =>
+              transactions.filter((t) => t.type === 'dispense' && t.productId === productId && t.storeId === inputStoreId && t.timestamp >= mStart).length
+
+            return (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* 入力店舗ラベル */}
+                <div className="px-4 py-2 bg-surface border-b border-border flex items-center gap-2 text-xs text-muted">
+                  <StoreDot store={inputStoreId} size="sm" />
+                  <span>{storeInfo[inputStoreId]?.name ?? inputStoreId} に記録</span>
+                  {store === 'all' && <span className="text-faint">（店舗フィルターで変更）</span>}
+                </div>
+                {/* 検索・カテゴリ */}
+                <div className="px-4 py-2 bg-surface border-b border-border flex gap-2 items-center flex-wrap">
+                  <input value={inputSearch} onChange={(e) => setInputSearch(e.target.value)}
+                    placeholder="商品名を検索" className="h-8 flex-1 min-w-0 border border-border rounded-md px-3 text-sm bg-bg text-text outline-none focus:border-accent" />
+                  <div className="flex gap-1 overflow-x-auto">
+                    {allCategories.slice(0, 8).map((c) => (
+                      <button key={c} onClick={() => setInputCategory(c)}
+                        className={`flex-shrink-0 px-2.5 h-8 rounded-md text-2xs font-bold transition-colors ${inputCategory === c ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'}`}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* 商品リスト */}
+                <div className="flex-1 overflow-y-auto divide-y divide-border">
+                  {inputProducts.map((p) => {
+                    const s = stocks.find((st) => st.productId === p.id && st.storeId === inputStoreId)
+                    const cnt = dispenseCount(p.id)
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 px-4 py-3 bg-surface hover:bg-bg transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-text truncate">{p.name}</p>
+                          <p className="text-2xs text-faint">{p.category}</p>
+                        </div>
+                        {/* 今月払出数 */}
+                        <div className="text-center flex-shrink-0 w-14">
+                          <p className="text-lg font-bold tabular-nums text-accent">{cnt}</p>
+                          <p className="text-2xs text-faint">今月払出</p>
+                        </div>
+                        {/* 在庫数 */}
+                        <div className="text-center flex-shrink-0 w-10">
+                          <p className="text-base font-bold tabular-nums">{s?.currentStock ?? 0}</p>
+                          <p className="text-2xs text-faint">在庫</p>
+                        </div>
+                        {/* ± ボタン */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => quickDispense(p.id, +1)}
+                            className="w-9 h-9 rounded-lg border border-border text-lg font-bold text-muted hover:bg-bg active:scale-95 transition-transform flex items-center justify-center"
+                          >＋</button>
+                          <button
+                            onClick={() => quickDispense(p.id, -1)}
+                            className="w-9 h-9 rounded-lg bg-accent text-white text-lg font-bold hover:opacity-90 active:scale-95 transition-transform flex items-center justify-center"
+                          >−</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {inputProducts.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-40 text-muted gap-2">
+                      <p className="text-sm font-semibold">該当商品なし</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* ======== 明細タブ ======== */}
           {viewMode === 'detail' && (
             <div className="flex-1 overflow-auto">
@@ -381,6 +509,13 @@ export function Sales() {
           )}
         </main>
       </div>
+
+      {/* トースト */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-text text-surface text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg z-50 pointer-events-none">
+          {toast}
+        </div>
+      )}
 
       {/* 削除確認 */}
       {confirmDeleteId && (
