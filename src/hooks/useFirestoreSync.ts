@@ -33,7 +33,6 @@ export function useFirestoreSync() {
   // - 起動後(以降): 別端末からの変更を即座に反映
   useEffect(() => {
     const myId = deviceId.current
-    const hasLocal = localStorage.getItem('salon-inventory-store') !== null
     let isFirstSnapshot = true
 
     const unsubscribe = subscribeToFirestore({
@@ -42,30 +41,23 @@ export function useFirestoreSync() {
 
         if (isFirstSnapshot) {
           isFirstSnapshot = false
-          if (!hasLocal || (firestoreDeviceId && firestoreDeviceId !== myId)) {
-            // ローカルなし、または別端末の書き込み → Firestoreから読み込む
-            useAppStore.getState().loadFromFirestore(data)
-          } else {
-            // 自分の書き込み(またはdeviceIdなし) → ローカルをFirestoreへ書き込む
-            pushToFirestore(useAppStore.getState(), myId)
-              .catch((e) => console.error('[Firestore init push]', e))
-          }
+          // 起動時は常にFirestoreのデータを読み込む
+          // (persistentLocalCacheにより自分の未送信書き込みもIndexedDBに含まれるため安全)
+          useAppStore.getState().loadFromFirestore(data)
           syncReadyRef.current = true
           return
         }
 
-        // 2回目以降: 別端末からのリアルタイム更新のみ反映
-        if (firestoreDeviceId && firestoreDeviceId !== myId) {
+        // 2回目以降: 別端末からのリアルタイム更新のみ反映（自分の書き込みはスキップ）
+        if (firestoreDeviceId !== myId) {
           useAppStore.getState().loadFromFirestore(data)
         }
       },
       onEmpty: () => {
         isFirstSnapshot = false
-        // Firestoreにデータなし → ローカルをアップロード
-        if (hasLocal) {
-          pushToFirestore(useAppStore.getState(), myId)
-            .catch((e) => console.error('[Firestore init push empty]', e))
-        }
+        // Firestoreにデータなし → ローカルをアップロード（初期セットアップ）
+        pushToFirestore(useAppStore.getState(), myId)
+          .catch((e) => console.error('[Firestore init push empty]', e))
         syncReadyRef.current = true
       },
       onError: () => {

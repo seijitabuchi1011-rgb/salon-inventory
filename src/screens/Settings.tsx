@@ -972,8 +972,10 @@ export function Settings() {
 
                   <Card>
                     <p className="text-xs font-semibold text-muted mb-1">アプリ情報</p>
-                    <Row label="バージョン">
-                      <span className="text-sm text-muted font-mono">1.0.0</span>
+                    <Row label="ビルド日時">
+                      <span className="text-xs text-muted font-mono">
+                        {new Date(__BUILD_TIME__).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </Row>
                     <Row label="商品数">
                       <span className="text-sm text-muted tabular-nums">{products.length} 件</span>
