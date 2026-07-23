@@ -1284,7 +1284,9 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => safeLocalStorage),
       version: 9,
       partialize: (state) => ({
-        products: state.products,
+        // 画像はFirestoreの別コレクションで管理するためlocalStorageには保存しない
+        // （保存するとQuotaExceededErrorでsetItem全体がサイレント失敗する原因になる）
+        products: state.products.map(({ image: _img, ...rest }) => rest),
         stocks: state.stocks,
         transactions: state.transactions,
         transfers: state.transfers,

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { subscribeToProductImages, writeToFirestore } from '../lib/firestore'
+import { subscribeToProductImages, writeToFirestore, readFromFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
 export function useFirestoreSync() {
@@ -22,13 +22,20 @@ export function useFirestoreSync() {
     })
   }, [])
 
-  // 起動時: ローカルの状態をFirestoreに書き込む
-  // （前回リロード時の書き込みが未完了だった場合の保護）
-  // ※ Firestoreから読み込むとlocalStorageの新しいデータを上書きするため読み込みは行わない
-  // ※ 別端末から最新データを取得したい場合は設定画面の「クラウドから読み込み」ボタンを使用
+  // 起動時: localStorageにデータがあればFirestoreへ同期
+  // localStorageが空（初回 or ストレージクリア後）の場合はFirestoreから復元する
   useEffect(() => {
-    writeToFirestore(useAppStore.getState())
-      .catch((e) => console.error('[Firestore init push]', e))
+    const hasLocal = localStorage.getItem('salon-inventory-store') !== null
+    if (hasLocal) {
+      writeToFirestore(useAppStore.getState())
+        .catch((e) => console.error('[Firestore init push]', e))
+    } else {
+      readFromFirestore()
+        .then((data) => {
+          if (data) useAppStore.getState().loadFromFirestore(data)
+        })
+        .catch((e) => console.error('[Firestore init read]', e))
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 商品画像は別コレクションのため常に同期
