@@ -466,7 +466,8 @@ export function Settings() {
       showToast('クラウドに保存しました ✓')
     } catch (e) {
       console.error('[手動クラウド保存]', e)
-      showToast('クラウド保存に失敗しました。Firebaseのルールを確認してください。')
+      const msg = e instanceof Error ? e.message : String(e)
+      showToast(`保存失敗: ${msg.slice(0, 60)}`)
     } finally {
       setCloudSaving(false)
     }

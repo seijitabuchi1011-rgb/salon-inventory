@@ -53,8 +53,28 @@ export async function readFromFirestore(): Promise<FirestoreData | null> {
 
 export async function writeToFirestore(data: FirestoreData, deviceId?: string): Promise<void> {
   // 画像は product-images コレクションで管理するため、メインドキュメントからは除外
+  // Zustand state を直接渡された場合でも action 関数を含めないよう明示的に列挙する
+  // (spread { ...data } だと Zustand の action 関数が混入し Firestore が拒否する)
   const products = data.products.map(({ image: _img, ...rest }) => rest)
-  await setDoc(STORE_DOC, { ...data, products, lastModified: Date.now(), lastModifiedBy: deviceId })
+  await setDoc(STORE_DOC, {
+    products,
+    stocks: data.stocks,
+    transactions: data.transactions,
+    transfers: data.transfers,
+    staffPurchases: data.staffPurchases,
+    staffPayments: data.staffPayments,
+    staffMembers: data.staffMembers,
+    storeInfo: data.storeInfo,
+    storeOrder: data.storeOrder,
+    appSettings: data.appSettings,
+    stocktakeSnapshots: data.stocktakeSnapshots,
+    categories: data.categories ?? [],
+    makers: data.makers ?? [],
+    dealers: data.dealers ?? [],
+    dealerReps: data.dealerReps ?? [],
+    lastModified: Date.now(),
+    lastModifiedBy: deviceId ?? null,
+  })
 }
 
 // --- product-images コレクション ---
