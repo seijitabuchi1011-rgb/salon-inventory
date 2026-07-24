@@ -36,6 +36,7 @@ export interface StoreStock {
   currentStock: number
   minStock: number
   active: boolean
+  lastModified?: number
 }
 
 export type OrderStatus = '下書き' | '発注中' | '発送済' | '本日到着' | '入荷済'

@@ -167,6 +167,7 @@ interface AppState {
   removeDealerRep: (name: string) => void
   setProductImages: (images: Record<string, string>) => void
   loadFromFirestore: (data: FirestoreData) => void
+  mergeFromFirestore: (data: FirestoreData) => void
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -1003,15 +1004,16 @@ export const useAppStore = create<AppState>()(
         }),
       upsertStock: (stock) =>
         set((state) => {
+          const stamped = { ...stock, lastModified: Date.now() }
           const exists = state.stocks.some(
             (s) => s.productId === stock.productId && s.storeId === stock.storeId
           )
           return {
             stocks: exists
               ? state.stocks.map((s) =>
-                  s.productId === stock.productId && s.storeId === stock.storeId ? stock : s
+                  s.productId === stock.productId && s.storeId === stock.storeId ? stamped : s
                 )
-              : [...state.stocks, stock],
+              : [...state.stocks, stamped],
           }
         }),
       deleteProduct: (id) =>
@@ -1273,6 +1275,67 @@ export const useAppStore = create<AppState>()(
             storeInfo: data.storeInfo ?? state.storeInfo,
             storeOrder: data.storeOrder ?? state.storeOrder,
             appSettings: data.appSettings ? migratedSettings : state.appSettings,
+            stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
+            categories: data.categories ?? state.categories,
+            makers: data.makers ?? state.makers,
+            dealers: data.dealers ?? state.dealers,
+            dealerReps: data.dealerReps ?? state.dealerReps,
+          }
+        }),
+
+      // 使用中の別端末からのリアルタイム更新: 入力を上書きしないスマートマージ
+      // - 在庫: lastModified タイムスタンプで新しい方を優先
+      // - トランザクション・仕入れ・スタッフ購入: IDで重複排除して統合
+      // - 商品・設定: Firestore側を採用（主にPCが管理するため）
+      mergeFromFirestore: (data) =>
+        set((state) => {
+          const deletedIds = readDeletedTxIds()
+
+          // 在庫マージ: タイムスタンプで新しい方を優先
+          const stockMap = new Map<string, StoreStock>()
+          for (const s of (data.stocks ?? [])) {
+            stockMap.set(`${s.productId}_${s.storeId}`, s)
+          }
+          for (const s of state.stocks) {
+            const key = `${s.productId}_${s.storeId}`
+            const remote = stockMap.get(key)
+            if (!remote || (s.lastModified ?? 0) > (remote.lastModified ?? 0)) {
+              stockMap.set(key, s)
+            }
+          }
+
+          // トランザクション: IDで重複排除して統合（tombstone適用）
+          const txMap = new Map<string, Transaction>()
+          for (const t of [...(data.transactions ?? []), ...state.transactions]) {
+            if (!txMap.has(t.id)) txMap.set(t.id, t)
+          }
+          const mergedTx = [...txMap.values()]
+            .filter((t) => !deletedIds.has(t.id))
+            .sort((a, b) => b.timestamp - a.timestamp)
+
+          // スタッフ購入: 同様にIDで重複排除統合
+          const spMap = new Map<string, StaffPurchase>()
+          for (const p of [...(data.staffPurchases ?? []), ...state.staffPurchases]) {
+            if (!spMap.has(p.id)) spMap.set(p.id, p)
+          }
+
+          return {
+            stocks: [...stockMap.values()],
+            transactions: mergedTx,
+            staffPurchases: [...spMap.values()],
+            // 商品・設定はFirestore側を採用（PCが管理）
+            products: data.products
+              ? data.products.map((fp) => ({
+                  ...fp,
+                  image: state.products.find((lp) => lp.id === fp.id)?.image,
+                }))
+              : state.products,
+            transfers: data.transfers ?? state.transfers,
+            staffPayments: data.staffPayments ?? state.staffPayments,
+            staffMembers: data.staffMembers ?? state.staffMembers,
+            storeInfo: data.storeInfo ?? state.storeInfo,
+            storeOrder: data.storeOrder ?? state.storeOrder,
+            appSettings: data.appSettings ?? state.appSettings,
             stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
             categories: data.categories ?? state.categories,
             makers: data.makers ?? state.makers,

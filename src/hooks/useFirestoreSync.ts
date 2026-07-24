@@ -28,24 +28,30 @@ export function useFirestoreSync() {
   const syncReadyRef = useRef(false)
   const deviceId = useRef(getOrCreateDeviceId())
 
-  // Firestoreを監視:
-  // - 起動時(初回スナップショット)のみFirestoreから読み込む
-  // - 使用中は別端末の書き込みによる自動上書きをしない（同時使用の競合防止）
-  // - 別端末の変更を反映したい場合はページをリロードする
+  // Firestoreをリアルタイム監視:
+  // - 起動時(初回): 全データをFirestoreから読み込む
+  // - 使用中(2回目以降): スマートマージで別端末の変更を統合
+  //   在庫はタイムスタンプ新しい方優先、トランザクションはID重複排除で統合
   useEffect(() => {
     const myId = deviceId.current
     let isFirstSnapshot = true
 
     const unsubscribe = subscribeToFirestore({
       onData: (data) => {
+        const firestoreDeviceId = (data as typeof data & { lastModifiedBy?: string }).lastModifiedBy
+
         if (isFirstSnapshot) {
           isFirstSnapshot = false
-          // 起動時は常にFirestoreのデータを読み込む
+          // 起動時は全データをFirestoreから読み込む
           useAppStore.getState().loadFromFirestore(data)
           syncReadyRef.current = true
+          return
         }
-        // 2回目以降（使用中のリアルタイム更新）は無視する
-        // → 同時使用時に互いの入力が上書きされるのを防ぐ
+
+        // 2回目以降: 自分の書き込みはスキップ、別端末はスマートマージ
+        if (firestoreDeviceId !== myId) {
+          useAppStore.getState().mergeFromFirestore(data)
+        }
       },
       onEmpty: () => {
         isFirstSnapshot = false
