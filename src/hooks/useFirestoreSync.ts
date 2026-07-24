@@ -21,11 +21,11 @@ async function pushToFirestore(
 }
 
 // 保存ボタンなど「即時書き込みが必要なタイミング」からコールできるモジュールレベル関数
-// useFirestoreSync が初期化済みのときのみ動作する
-let _immediateFlush: (() => void) | null = null
+// Promise を返し、Firestore の IndexedDB 書き込みが完了するまで await できる
+let _immediateFlush: (() => Promise<void>) | null = null
 
-export function flushToFirestoreNow(): void {
-  _immediateFlush?.()
+export async function flushToFirestoreNow(): Promise<void> {
+  if (_immediateFlush) await _immediateFlush()
 }
 
 export function useFirestoreSync() {
@@ -40,13 +40,10 @@ export function useFirestoreSync() {
   useEffect(() => {
     const myId = deviceId.current
 
-    // 保存ボタン等からの即時書き込み
-    _immediateFlush = () => {
+    // 保存ボタン等からの即時書き込み（Promiseを返しawait可能）
+    _immediateFlush = async () => {
       if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
-      if (!syncReadyRef.current) return
-      pushToFirestore(useAppStore.getState(), myId).catch((e) =>
-        console.error('[Firestore immediate flush]', e)
-      )
+      await pushToFirestore(useAppStore.getState(), myId)
     }
 
     return () => { _immediateFlush = null }

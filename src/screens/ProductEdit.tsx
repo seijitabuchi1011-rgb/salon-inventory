@@ -78,16 +78,8 @@ export function ProductEdit() {
   const [dealerRep, setDealerRep] = useState(existing?.dealerRep ?? '')
   const [image, setImage] = useState(existing?.image ?? '')
   const [savedToast, setSavedToast] = useState(false)
-  const [pendingNav, setPendingNav] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
-
-  // doSave 後のレンダリング完了を待ってから遷移する
-  useEffect(() => {
-    if (pendingNav) {
-      navigate('/products', { state: { category: backCategory }, replace: true })
-    }
-  }, [pendingNav]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // useState の初期値は初回レンダリング時のみ評価されるため、
   // zustand の localStorage 復元後に確実に同期する
@@ -165,16 +157,19 @@ export function ProductEdit() {
     }
   }
 
-  const handleSave = () => {
-    doSave(existing?.id ?? String(Date.now()))
-    flushToFirestoreNow()
-    setPendingNav(true)
+  const handleSave = async () => {
+    const productId = existing?.id ?? String(Date.now())
+    doSave(productId)
+    // Firestoreへの書き込みが IndexedDB に確定するまで待ってからナビゲーション
+    // これにより「保存→すぐリロード→8に戻る」を防ぐ
+    await flushToFirestoreNow()
+    navigate('/products', { state: { category: backCategory }, replace: true })
   }
 
-  const handleSaveAndNext = () => {
+  const handleSaveAndNext = async () => {
     if (!name.trim()) { nameInputRef.current?.focus(); return }
     doSave(String(Date.now()))
-    flushToFirestoreNow()
+    await flushToFirestoreNow()
     setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
     setMemo(''); setImage('')
     setStoreStocks((prev) =>
