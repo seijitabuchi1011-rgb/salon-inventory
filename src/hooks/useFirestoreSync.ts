@@ -24,14 +24,11 @@ export function useFirestoreSync() {
   const { setProductImages } = useAppStore()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stateRef = useRef(useAppStore.getState())
-  // 起動時の初期同期が完了するまでデバウンス書き込みをブロック
   const syncReadyRef = useRef(false)
   const deviceId = useRef(getOrCreateDeviceId())
+  // mergeFromFirestore実行中はdebounceを起動しない（ピンポンループ防止）
+  const isMergingRef = useRef(false)
 
-  // Firestoreをリアルタイム監視:
-  // - 起動時(初回): 全データをFirestoreから読み込む
-  // - 使用中(2回目以降): スマートマージで別端末の変更を統合
-  //   在庫はタイムスタンプ新しい方優先、トランザクションはID重複排除で統合
   useEffect(() => {
     const myId = deviceId.current
     let isFirstSnapshot = true
@@ -42,20 +39,21 @@ export function useFirestoreSync() {
 
         if (isFirstSnapshot) {
           isFirstSnapshot = false
-          // 起動時は全データをFirestoreから読み込む
           useAppStore.getState().loadFromFirestore(data)
           syncReadyRef.current = true
           return
         }
 
-        // 2回目以降: 自分の書き込みはスキップ、別端末はスマートマージ
+        // 別端末の書き込みのみマージ（自分の書き込みはskip）
+        // isMergingRefでdebounceをブロックしてピンポンループを防止
         if (firestoreDeviceId !== myId) {
+          isMergingRef.current = true
           useAppStore.getState().mergeFromFirestore(data)
+          isMergingRef.current = false
         }
       },
       onEmpty: () => {
         isFirstSnapshot = false
-        // Firestoreにデータなし → ローカルをアップロード（初期セットアップ）
         pushToFirestore(useAppStore.getState(), myId)
           .catch((e) => console.error('[Firestore init push empty]', e))
         syncReadyRef.current = true
@@ -69,12 +67,16 @@ export function useFirestoreSync() {
     return unsubscribe
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 状態変化を監視してFirestoreへデバウンス書き込み
   useEffect(() => {
     stateRef.current = useAppStore.getState()
     return useAppStore.subscribe((state) => {
+      // マージ中でも stateRef は更新（次のdebounce書き込みで最新状態を使うため）
       stateRef.current = state
       if (!syncReadyRef.current) return
+      // マージによる状態変化はdebounceを起動しない（ピンポンループ防止）
+      // ユーザー自身の変更による既存debounceは維持されるため、
+      // mergeされた最新stateが次のdebounce書き込みに反映される
+      if (isMergingRef.current) return
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         pushToFirestore(state, deviceId.current).catch((e) =>
