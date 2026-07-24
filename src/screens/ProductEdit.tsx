@@ -6,6 +6,7 @@ import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
 import { writeProductImage, deleteProductImage } from '../lib/firestore'
+import { flushToFirestoreNow } from '../hooks/useFirestoreSync'
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
@@ -166,12 +167,14 @@ export function ProductEdit() {
 
   const handleSave = () => {
     doSave(existing?.id ?? String(Date.now()))
+    flushToFirestoreNow()
     setPendingNav(true)
   }
 
   const handleSaveAndNext = () => {
     if (!name.trim()) { nameInputRef.current?.focus(); return }
     doSave(String(Date.now()))
+    flushToFirestoreNow()
     setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
     setMemo(''); setImage('')
     setStoreStocks((prev) =>

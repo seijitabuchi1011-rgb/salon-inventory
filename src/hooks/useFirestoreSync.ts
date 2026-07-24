@@ -20,6 +20,14 @@ async function pushToFirestore(
   await writeToFirestore(state, deviceId)
 }
 
+// 保存ボタンなど「即時書き込みが必要なタイミング」からコールできるモジュールレベル関数
+// useFirestoreSync が初期化済みのときのみ動作する
+let _immediateFlush: (() => void) | null = null
+
+export function flushToFirestoreNow(): void {
+  _immediateFlush?.()
+}
+
 export function useFirestoreSync() {
   const { setProductImages } = useAppStore()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -28,6 +36,21 @@ export function useFirestoreSync() {
   const deviceId = useRef(getOrCreateDeviceId())
   // mergeFromFirestore実行中はdebounceを起動しない（ピンポンループ防止）
   const isMergingRef = useRef(false)
+
+  useEffect(() => {
+    const myId = deviceId.current
+
+    // 保存ボタン等からの即時書き込み
+    _immediateFlush = () => {
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
+      if (!syncReadyRef.current) return
+      pushToFirestore(useAppStore.getState(), myId).catch((e) =>
+        console.error('[Firestore immediate flush]', e)
+      )
+    }
+
+    return () => { _immediateFlush = null }
+  }, [])
 
   useEffect(() => {
     const myId = deviceId.current
@@ -47,8 +70,7 @@ export function useFirestoreSync() {
           } else {
             // 通常の端末データ → syncReadyをセットしてからマージ
             // ローカルの未保存変更（localStorage）をタイムスタンプで保護しつつ
-            // Firestoreの新しい変更もマージする。マージ後にdebounceで
-            // ローカルの未保存分をFirestoreへ書き戻す。
+            // Firestoreの新しい変更もマージ。マージ後のdebounceで未保存分を書き戻す。
             syncReadyRef.current = true
             useAppStore.getState().mergeFromFirestore(data)
           }
@@ -81,28 +103,22 @@ export function useFirestoreSync() {
   useEffect(() => {
     stateRef.current = useAppStore.getState()
     return useAppStore.subscribe((state) => {
-      // マージ中でも stateRef は更新（次のdebounce書き込みで最新状態を使うため）
       stateRef.current = state
       if (!syncReadyRef.current) return
-      // マージによる状態変化はdebounceを起動しない（ピンポンループ防止）
-      // ユーザー自身の変更による既存debounceは維持されるため、
-      // mergeされた最新stateが次のdebounce書き込みに反映される
       if (isMergingRef.current) return
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         pushToFirestore(state, deviceId.current).catch((e) =>
           console.error('[Firestore backup]', e)
         )
-      }, 1000)
+      }, 300)
     })
   }, [])
 
-  // 商品画像は別コレクションのため常に同期
   useEffect(() => {
     return subscribeToProductImages(setProductImages)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // アプリがバックグラウンド/非表示になったとき即座にFirestoreへ保存
   useEffect(() => {
     const flush = () => {
       if (debounceRef.current) {
@@ -110,7 +126,7 @@ export function useFirestoreSync() {
         debounceRef.current = null
       }
       if (!syncReadyRef.current) return
-      pushToFirestore(stateRef.current, deviceId.current).catch((e) =>
+      pushToFirestore(useAppStore.getState(), deviceId.current).catch((e) =>
         console.error('[Firestore backup on hide]', e)
       )
     }
