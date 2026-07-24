@@ -39,8 +39,19 @@ export function useFirestoreSync() {
 
         if (isFirstSnapshot) {
           isFirstSnapshot = false
-          useAppStore.getState().loadFromFirestore(data)
-          syncReadyRef.current = true
+
+          if (firestoreDeviceId === 'upload-script' || !firestoreDeviceId) {
+            // バックアップ直後または初期データ → Firestoreで完全上書き
+            useAppStore.getState().loadFromFirestore(data)
+            syncReadyRef.current = true
+          } else {
+            // 通常の端末データ → syncReadyをセットしてからマージ
+            // ローカルの未保存変更（localStorage）をタイムスタンプで保護しつつ
+            // Firestoreの新しい変更もマージする。マージ後にdebounceで
+            // ローカルの未保存分をFirestoreへ書き戻す。
+            syncReadyRef.current = true
+            useAppStore.getState().mergeFromFirestore(data)
+          }
           return
         }
 
