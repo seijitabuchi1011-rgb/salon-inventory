@@ -60,18 +60,11 @@ export function useFirestoreSync() {
 
         if (isFirstSnapshot) {
           isFirstSnapshot = false
-
-          if (firestoreDeviceId === 'upload-script' || !firestoreDeviceId) {
-            // バックアップ直後または初期データ → Firestoreで完全上書き
-            useAppStore.getState().loadFromFirestore(data)
-            syncReadyRef.current = true
-          } else {
-            // 通常の端末データ → syncReadyをセットしてからマージ
-            // ローカルの未保存変更（localStorage）をタイムスタンプで保護しつつ
-            // Firestoreの新しい変更もマージ。マージ後のdebounceで未保存分を書き戻す。
-            syncReadyRef.current = true
-            useAppStore.getState().mergeFromFirestore(data)
-          }
+          // 起動時は常にmergeFromFirestoreでローカルの変更を保護する
+          // Firestoreへの書き込みが失敗していてもローカル(lastModified付き)が勝つ
+          // ※ Settings「☁ 読込」は別途loadFromFirestoreを明示的に呼ぶ
+          syncReadyRef.current = true
+          useAppStore.getState().mergeFromFirestore(data)
           return
         }
 
