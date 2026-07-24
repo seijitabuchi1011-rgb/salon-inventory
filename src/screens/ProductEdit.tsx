@@ -157,19 +157,16 @@ export function ProductEdit() {
     }
   }
 
-  const handleSave = async () => {
-    const productId = existing?.id ?? String(Date.now())
-    doSave(productId)
-    // Firestoreへの書き込みが IndexedDB に確定するまで待ってからナビゲーション
-    // これにより「保存→すぐリロード→8に戻る」を防ぐ
-    await flushToFirestoreNow()
+  const handleSave = () => {
+    doSave(existing?.id ?? String(Date.now()))
+    flushToFirestoreNow()
     navigate('/products', { state: { category: backCategory }, replace: true })
   }
 
-  const handleSaveAndNext = async () => {
+  const handleSaveAndNext = () => {
     if (!name.trim()) { nameInputRef.current?.focus(); return }
     doSave(String(Date.now()))
-    await flushToFirestoreNow()
+    flushToFirestoreNow()
     setName(''); setBarcode(''); setPurchasePrice(''); setSellPrice('')
     setMemo(''); setImage('')
     setStoreStocks((prev) =>

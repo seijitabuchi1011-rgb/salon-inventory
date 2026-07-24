@@ -403,6 +403,16 @@ export function Settings() {
   const jsonImportRef = useRef<HTMLInputElement>(null)
   const [cloudSaving, setCloudSaving] = useState(false)
   const [cloudLoading, setCloudLoading] = useState(false)
+  const [firestoreInfo, setFirestoreInfo] = useState<{ lastModifiedBy?: string; lastModified?: number } | null>(null)
+
+  useEffect(() => {
+    readFromFirestore().then((data) => {
+      if (data) {
+        const d = data as typeof data & { lastModifiedBy?: string; lastModified?: number }
+        setFirestoreInfo({ lastModifiedBy: d.lastModifiedBy, lastModified: d.lastModified })
+      }
+    }).catch(() => setFirestoreInfo(null))
+  }, [])
 
   function exportAllJson() {
     const data = {
@@ -983,6 +993,26 @@ export function Settings() {
                     <Row label="取引記録">
                       <span className="text-sm text-muted tabular-nums">{transactions.length} 件</span>
                     </Row>
+                  </Card>
+
+                  <Card>
+                    <p className="text-xs font-semibold text-muted mb-1">Firestore診断（設定を開いた時点）</p>
+                    <Row label="最終書込端末">
+                      <span className="text-xs text-muted font-mono break-all text-right max-w-[160px]">
+                        {firestoreInfo?.lastModifiedBy ?? '読込中...'}
+                      </span>
+                    </Row>
+                    <Row label="最終書込日時">
+                      <span className="text-xs text-muted font-mono">
+                        {firestoreInfo?.lastModified
+                          ? new Date(firestoreInfo.lastModified).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          : '—'}
+                      </span>
+                    </Row>
+                    <p className="text-xs text-faint mt-2">
+                      「最終書込端末」が upload-script のままなら自動同期が届いていません。
+                      上の「☁ 保存」で手動保存し、結果を確認してください。
+                    </p>
                   </Card>
                 </>
               )}
