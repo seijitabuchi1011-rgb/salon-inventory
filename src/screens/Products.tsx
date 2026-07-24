@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   DndContext,
@@ -23,6 +23,160 @@ import { useAppStore } from '../store'
 import type { Product, StoreStock } from '../types'
 
 // カテゴリはストアから取得するため定数は削除（下のコンポーネントで categories を使用）
+
+// ─── 在庫クイック編集ボトムシート ─────────────────────────────────────────
+
+function StepInput({
+  value,
+  onChange,
+  min = 0,
+}: {
+  value: number
+  onChange: (v: number) => void
+  min?: number
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => onChange(Math.max(min, value - 1))}
+        className="w-9 h-9 rounded-lg bg-bg border border-border text-lg font-bold text-muted flex items-center justify-center active:bg-border transition-colors flex-shrink-0"
+      >
+        −
+      </button>
+      <input
+        ref={inputRef}
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10)
+          if (!isNaN(v)) onChange(Math.max(min, v))
+        }}
+        onFocus={() => inputRef.current?.select()}
+        className="w-14 h-9 text-center text-base font-bold tabular-nums border border-border rounded-lg bg-surface text-text outline-none focus:border-accent"
+      />
+      <button
+        onClick={() => onChange(value + 1)}
+        className="w-9 h-9 rounded-lg bg-bg border border-border text-lg font-bold text-muted flex items-center justify-center active:bg-border transition-colors flex-shrink-0"
+      >
+        ＋
+      </button>
+    </div>
+  )
+}
+
+function StockEditSheet({
+  product,
+  flagStock,
+  lienStock,
+  onSave,
+  onClose,
+}: {
+  product: Product
+  flagStock: StoreStock | undefined
+  lienStock: StoreStock | undefined
+  onSave: (flag: Pick<StoreStock, 'currentStock' | 'minStock'>, lien: Pick<StoreStock, 'currentStock' | 'minStock'>) => void
+  onClose: () => void
+}) {
+  const [flagCurrent, setFlagCurrent] = useState(flagStock?.currentStock ?? 0)
+  const [flagMin, setFlagMin] = useState(flagStock?.minStock ?? 3)
+  const [lienCurrent, setLienCurrent] = useState(lienStock?.currentStock ?? 0)
+  const [lienMin, setLienMin] = useState(lienStock?.minStock ?? 3)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(t)
+  }, [])
+
+  function handleClose() {
+    setVisible(false)
+    setTimeout(onClose, 220)
+  }
+
+  function handleSave() {
+    onSave(
+      { currentStock: flagCurrent, minStock: flagMin },
+      { currentStock: lienCurrent, minStock: lienMin },
+    )
+    handleClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      {/* 背景オーバーレイ */}
+      <div
+        onClick={handleClose}
+        className="absolute inset-0 bg-black/40 transition-opacity duration-200"
+        style={{ opacity: visible ? 1 : 0 }}
+      />
+      {/* シート本体 */}
+      <div
+        className="relative bg-surface rounded-t-2xl shadow-2xl transition-transform duration-220"
+        style={{ transform: visible ? 'translateY(0)' : 'translateY(100%)' }}
+      >
+        {/* ハンドルバー */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-border-strong" />
+        </div>
+        {/* ヘッダー */}
+        <div className="px-5 pt-2 pb-3 border-b border-border">
+          <p className="text-xs text-faint font-mono truncate">{product.barcode}</p>
+          <p className="font-bold text-text text-base leading-snug mt-0.5">{product.name}</p>
+        </div>
+        {/* 在庫フォーム */}
+        <div className="px-5 py-4 flex gap-6">
+          {/* flag */}
+          <div className="flex-1">
+            <p className="text-xs font-bold mb-3" style={{ color: '#1B5EB8' }}>flag 美容室</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-xs text-muted mb-1.5">現在庫</p>
+                <StepInput value={flagCurrent} onChange={setFlagCurrent} />
+              </div>
+              <div>
+                <p className="text-xs text-muted mb-1.5">下限</p>
+                <StepInput value={flagMin} onChange={setFlagMin} />
+              </div>
+            </div>
+          </div>
+          {/* 区切り */}
+          <div className="w-px bg-border self-stretch" />
+          {/* lien */}
+          <div className="flex-1">
+            <p className="text-xs font-bold mb-3" style={{ color: '#7B2FA8' }}>Lien カラー専門店</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-xs text-muted mb-1.5">現在庫</p>
+                <StepInput value={lienCurrent} onChange={setLienCurrent} />
+              </div>
+              <div>
+                <p className="text-xs text-muted mb-1.5">下限</p>
+                <StepInput value={lienMin} onChange={setLienMin} />
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* ボタン */}
+        <div className="px-5 pb-8 pt-2 flex gap-3 border-t border-border">
+          <button
+            onClick={handleClose}
+            className="flex-1 h-11 rounded-xl border border-border text-sm font-semibold text-muted"
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 h-11 rounded-xl bg-accent text-white text-sm font-bold"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function stockStatus(current: number, min: number): { label: string; variant: 'danger' | 'warn' | 'ok' } {
   if (current <= min) return { label: '不足', variant: 'danger' }
@@ -66,6 +220,7 @@ function SortableRow({
   onDelete,
   onToggleFlagActive,
   onToggleLienActive,
+  onEditStock,
 }: {
   p: Product
   flagStock: StoreStock | undefined
@@ -76,6 +231,7 @@ function SortableRow({
   onDelete: () => void
   onToggleFlagActive: () => void
   onToggleLienActive: () => void
+  onEditStock: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id })
 
@@ -144,11 +300,27 @@ function SortableRow({
       <td className="px-2 py-3 w-16 text-center" onClick={(e) => e.stopPropagation()}>
         <ActiveToggle active={lienActive} color="lien" onToggle={onToggleLienActive} />
       </td>
-      <td className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer ${flagLow ? 'text-danger' : 'text-text'}`} onClick={onNavigate}>
-        {flagActive ? (flagStock?.currentStock ?? '—') : <span className="text-faint text-xs">取扱なし</span>}
+      <td
+        className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer select-none ${flagLow ? 'text-danger' : 'text-text'}`}
+        onClick={(e) => { e.stopPropagation(); onEditStock() }}
+      >
+        {flagActive ? (
+          <span className="inline-flex items-center gap-1">
+            {flagStock?.currentStock ?? '—'}
+            <span className="text-2xs text-faint font-normal">/{flagStock?.minStock ?? '—'}</span>
+          </span>
+        ) : <span className="text-faint text-xs">取扱なし</span>}
       </td>
-      <td className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer ${lienLow ? 'text-danger' : 'text-text'}`} onClick={onNavigate}>
-        {lienActive ? (lienStock?.currentStock ?? '—') : <span className="text-faint text-xs">取扱なし</span>}
+      <td
+        className={`px-4 py-3 text-right font-bold tabular-nums cursor-pointer select-none ${lienLow ? 'text-danger' : 'text-text'}`}
+        onClick={(e) => { e.stopPropagation(); onEditStock() }}
+      >
+        {lienActive ? (
+          <span className="inline-flex items-center gap-1">
+            {lienStock?.currentStock ?? '—'}
+            <span className="text-2xs text-faint font-normal">/{lienStock?.minStock ?? '—'}</span>
+          </span>
+        ) : <span className="text-faint text-xs">取扱なし</span>}
       </td>
       <td className="px-4 py-3 text-right font-bold tabular-nums cursor-pointer" onClick={onNavigate}>{total}</td>
       <td className="px-4 py-3 text-center cursor-pointer" onClick={onNavigate}>
@@ -178,6 +350,7 @@ export function Products() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState('')
+  const [editProductId, setEditProductId] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -337,6 +510,7 @@ export function Products() {
                         onDelete={() => setConfirmId(p.id)}
                         onToggleFlagActive={() => toggleActive(p.id, 'flag')}
                         onToggleLienActive={() => toggleActive(p.id, 'lien')}
+                        onEditStock={() => setEditProductId(p.id)}
                       />
                     ))}
                   </tbody>
@@ -383,6 +557,26 @@ export function Products() {
           </button>
         </div>
       )}
+
+      {/* 在庫クイック編集シート */}
+      {editProductId && (() => {
+        const p = products.find((x) => x.id === editProductId)
+        if (!p) return null
+        const fs = getStock(p.id, 'flag')
+        const ls = getStock(p.id, 'lien')
+        return (
+          <StockEditSheet
+            product={p}
+            flagStock={fs}
+            lienStock={ls}
+            onClose={() => setEditProductId(null)}
+            onSave={(flag, lien) => {
+              upsertStock({ productId: p.id, storeId: 'flag', currentStock: flag.currentStock, minStock: flag.minStock, active: fs?.active ?? true })
+              upsertStock({ productId: p.id, storeId: 'lien', currentStock: lien.currentStock, minStock: lien.minStock, active: ls?.active ?? true })
+            }}
+          />
+        )
+      })()}
 
       {/* 削除確認ダイアログ（単体） */}
       {confirmId && (() => {
