@@ -59,19 +59,15 @@ export function useFirestoreSync() {
         if (isFirstSnapshot) {
           isFirstSnapshot = false
           // 起動時は常にmergeFromFirestoreでローカルの変更を保護する
-          // ※ isMergingRefをtrueにしてdebounceを一時ブロックし、マージ完了後に
-          //   syncReadyRef = trueにすることで、最新stateRefを使った書き込みが走る
+          // isMergingRef=trueでdebounceをブロックし、ピンポンを防止
+          // ※ 起動時のwrite-backは廃止: persistentLocalCacheにより最初のonDataが
+          //   IndexedDBキャッシュ（古いデータ）から来ることがあり、古いデータを
+          //   Firestoreに書き戻すとPCの新しい変更が上書きされてしまうため。
+          //   オフライン中の変更はFirestoreのオフラインキューが自動的にサーバーに送信する。
           isMergingRef.current = true
           useAppStore.getState().mergeFromFirestore(data)
           isMergingRef.current = false
           syncReadyRef.current = true
-          // マージ済みの最新状態をFirestoreに書き戻す（ローカルの未同期変更を反映）
-          if (debounceRef.current) clearTimeout(debounceRef.current)
-          debounceRef.current = setTimeout(() => {
-            pushToFirestore(stateRef.current, myId).catch((e) =>
-              console.error('[Firestore init sync]', e)
-            )
-          }, 300)
           return
         }
 
