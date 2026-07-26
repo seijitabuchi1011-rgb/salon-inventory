@@ -56,8 +56,6 @@ export function useFirestoreSync() {
 
     const unsubscribe = subscribeToFirestore({
       onData: (data) => {
-        const firestoreDeviceId = (data as typeof data & { lastModifiedBy?: string }).lastModifiedBy
-
         if (isFirstSnapshot) {
           isFirstSnapshot = false
           // 起動時は常にmergeFromFirestoreでローカルの変更を保護する
@@ -77,13 +75,14 @@ export function useFirestoreSync() {
           return
         }
 
-        // 別端末の書き込みのみマージ（自分の書き込みはskip）
-        // isMergingRefでdebounceをブロックしてピンポンループを防止
-        if (firestoreDeviceId !== myId) {
-          isMergingRef.current = true
-          useAppStore.getState().mergeFromFirestore(data)
-          isMergingRef.current = false
-        }
+        // 常にmergeFromFirestoreでデータを統合する（自分の書き込みも含む）
+        // isMergingRef=trueの間はdebounce（write-back）をブロックしてピンポンを防止
+        // ※ firestoreDeviceId === myIdのスキップを廃止: 起動時のwrite-back確認が
+        //   PC側スナップショットより後に届くと lastModifiedBy がiPad自身のIDになり
+        //   PCの変更が永遠にskipされるレースコンディションが発生するため
+        isMergingRef.current = true
+        useAppStore.getState().mergeFromFirestore(data)
+        isMergingRef.current = false
       },
       onEmpty: () => {
         isFirstSnapshot = false
