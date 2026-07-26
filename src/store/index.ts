@@ -1319,10 +1319,31 @@ export const useAppStore = create<AppState>()(
             if (!spMap.has(p.id)) spMap.set(p.id, p)
           }
 
+          // スタッフ支払: IDで重複排除統合
+          const spayMap = new Map<string, StaffPayment>()
+          for (const p of [...(data.staffPayments ?? []), ...state.staffPayments]) {
+            if (!spayMap.has(p.id)) spayMap.set(p.id, p)
+          }
+
+          // 移動履歴: IDで重複排除統合（status更新はFirestore側を優先）
+          const trMap = new Map<string, Transfer>()
+          for (const t of [...state.transfers, ...(data.transfers ?? [])]) {
+            trMap.set(t.id, t) // Firestore側（後に処理）が同一IDを上書き
+          }
+
+          // 棚卸スナップショット: IDで重複排除統合（完了記録を両端末で保持）
+          const snapMap = new Map<string, StocktakeSnapshot>()
+          for (const s of [...(data.stocktakeSnapshots ?? []), ...state.stocktakeSnapshots]) {
+            if (!snapMap.has(s.id)) snapMap.set(s.id, s)
+          }
+
           return {
             stocks: [...stockMap.values()],
             transactions: mergedTx,
             staffPurchases: [...spMap.values()],
+            staffPayments: [...spayMap.values()],
+            transfers: [...trMap.values()],
+            stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
             // 商品・設定はFirestore側を採用（PCが管理）
             products: data.products
               ? data.products.map((fp) => ({
@@ -1330,13 +1351,10 @@ export const useAppStore = create<AppState>()(
                   image: state.products.find((lp) => lp.id === fp.id)?.image,
                 }))
               : state.products,
-            transfers: data.transfers ?? state.transfers,
-            staffPayments: data.staffPayments ?? state.staffPayments,
             staffMembers: data.staffMembers ?? state.staffMembers,
             storeInfo: data.storeInfo ?? state.storeInfo,
             storeOrder: data.storeOrder ?? state.storeOrder,
             appSettings: data.appSettings ?? state.appSettings,
-            stocktakeSnapshots: data.stocktakeSnapshots ?? state.stocktakeSnapshots,
             categories: data.categories ?? state.categories,
             makers: data.makers ?? state.makers,
             dealers: data.dealers ?? state.dealers,
