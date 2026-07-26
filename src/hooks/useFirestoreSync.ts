@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { subscribeToProductImages, writeToFirestore, subscribeToFirestore } from '../lib/firestore'
+import { subscribeToProductImages, writeToFirestore, subscribeToFirestore, readFromFirestore } from '../lib/firestore'
 import { useAppStore } from '../store'
 
 const DEVICE_ID_KEY = 'salon-inventory-device-id'
@@ -121,18 +121,31 @@ export function useFirestoreSync() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const myId = deviceId.current
     const flush = () => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current)
         debounceRef.current = null
       }
       if (!syncReadyRef.current) return
-      pushToFirestore(useAppStore.getState(), deviceId.current).catch((e) =>
+      pushToFirestore(useAppStore.getState(), myId).catch((e) =>
         console.error('[Firestore backup on hide]', e)
       )
     }
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flush()
+      if (document.visibilityState === 'hidden') {
+        flush()
+      } else {
+        // フォアグラウンド復帰時にFirestoreを強制再読み込み
+        // iOS Safariはバックグラウンド中にonSnapshotリスナーが停止する場合があるため
+        if (!syncReadyRef.current) return
+        readFromFirestore().then((data) => {
+          if (!data) return
+          isMergingRef.current = true
+          useAppStore.getState().mergeFromFirestore(data)
+          isMergingRef.current = false
+        }).catch((e) => console.error('[Firestore resume read]', e))
+      }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('pagehide', flush)
