@@ -21,10 +21,10 @@ async function pushToFirestore(
 }
 
 // 保存ボタンなど「即時書き込みが必要なタイミング」からコールできるモジュールレベル関数
-let _immediateFlush: (() => void) | null = null
+let _immediateFlush: (() => Promise<void>) | null = null
 
-export function flushToFirestoreNow(): void {
-  _immediateFlush?.()
+export function flushToFirestoreNow(): Promise<void> {
+  return _immediateFlush?.() ?? Promise.resolve()
 }
 
 export function useFirestoreSync() {
@@ -42,7 +42,7 @@ export function useFirestoreSync() {
     // 保存ボタン等からの即時書き込み
     _immediateFlush = () => {
       if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
-      pushToFirestore(useAppStore.getState(), myId)
+      return pushToFirestore(useAppStore.getState(), myId)
         .then(() => console.log('[Firestore] immediate flush: success'))
         .catch((e) => console.error('[Firestore] immediate flush: FAILED', e))
     }
@@ -61,10 +61,19 @@ export function useFirestoreSync() {
         if (isFirstSnapshot) {
           isFirstSnapshot = false
           // 起動時は常にmergeFromFirestoreでローカルの変更を保護する
-          // Firestoreへの書き込みが失敗していてもローカル(lastModified付き)が勝つ
-          // ※ Settings「☁ 読込」は別途loadFromFirestoreを明示的に呼ぶ
-          syncReadyRef.current = true
+          // ※ isMergingRefをtrueにしてdebounceを一時ブロックし、マージ完了後に
+          //   syncReadyRef = trueにすることで、最新stateRefを使った書き込みが走る
+          isMergingRef.current = true
           useAppStore.getState().mergeFromFirestore(data)
+          isMergingRef.current = false
+          syncReadyRef.current = true
+          // マージ済みの最新状態をFirestoreに書き戻す（ローカルの未同期変更を反映）
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          debounceRef.current = setTimeout(() => {
+            pushToFirestore(stateRef.current, myId).catch((e) =>
+              console.error('[Firestore init sync]', e)
+            )
+          }, 300)
           return
         }
 
@@ -99,7 +108,9 @@ export function useFirestoreSync() {
       if (isMergingRef.current) return
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
-        pushToFirestore(state, deviceId.current).catch((e) =>
+        // stateRef.current を使う: タイマー設定後に mergeFromFirestore で状態が変わっても
+        // 常に最新状態を書き込む（クロージャの state は古い可能性がある）
+        pushToFirestore(stateRef.current, deviceId.current).catch((e) =>
           console.error('[Firestore backup]', e)
         )
       }, 300)

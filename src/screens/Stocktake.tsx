@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Badge } from '../components/Badge'
@@ -6,6 +6,7 @@ import { Btn } from '../components/Btn'
 import { Card } from '../components/Card'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import { saveStocktakeDirectly } from '../lib/firestore'
 import type { StoreId, StocktakeSnapshot, Product, StoreStock } from '../types'
 
 type StoreTab = 'flag' | 'lien'
@@ -193,6 +194,8 @@ export function Stocktake() {
   const [category, setCategory] = useState('すべて')
   const [modal, setModal] = useState<{ productId: string; inputQty: number } | null>(null)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [draftSaved, setDraftSaved] = useState(false)
 
   // 棚卸開始時の在庫スナップショット（このセッション中は変わらない）
   const [theoretical] = useState<Record<string, Record<string, number>>>(() => {
@@ -205,10 +208,22 @@ export function Stocktake() {
     return snap
   })
 
-  // 入力済み実棚数
-  const [actualCounts, setActualCounts] = useState<Record<string, Record<string, number>>>({
-    flag: {}, lien: {},
+  // 入力済み実棚数（localStorageに下書き保存して途中再開可能にする）
+  const DRAFT_KEY = 'salon-stocktake-draft'
+  const [actualCounts, setActualCounts] = useState<Record<string, Record<string, number>>>(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return { flag: {}, lien: {} }
+      const saved = JSON.parse(raw) as { month: string; counts: Record<string, Record<string, number>> }
+      if (saved.month !== currentMonth) return { flag: {}, lien: {} } // 月が変わったらリセット
+      return saved.counts ?? { flag: {}, lien: {} }
+    } catch { return { flag: {}, lien: {} } }
   })
+  useEffect(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ month: currentMonth, counts: actualCounts })) } catch { /* ignore */ }
+  }, [actualCounts])
 
   const month = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
 
@@ -263,7 +278,8 @@ export function Stocktake() {
     setModal(null)
   }
 
-  function completeStocktake() {
+  async function completeStocktake() {
+    setSaving(true)
     // 確認済みの実棚数を一括で在庫に反映
     Object.entries(actualCounts[store]).forEach(([productId, qty]) => {
       const s = stocks.find((st) => st.productId === productId && st.storeId === store)
@@ -275,7 +291,7 @@ export function Stocktake() {
         active: s?.active ?? true,
       })
     })
-    // 月次スナップショットを保存
+    // 月次スナップショットをZustandに追加
     const today = new Date()
     addStocktakeSnapshot({
       month: today.toISOString().slice(0, 7),
@@ -286,10 +302,23 @@ export function Stocktake() {
       diffCount: diffCount,
       totalItems: items.length,
     })
+    // Zustand更新後の最新stateを取得してFirestoreに直接書き込む
+    // （syncループを経由しないためタイミング問題の影響を受けない）
+    const finalState = useAppStore.getState()
+    const newSnapshot = finalState.stocktakeSnapshots[0] // 最新が先頭
+    const deviceId = localStorage.getItem('salon-inventory-device-id') ?? 'unknown'
+    try {
+      await saveStocktakeDirectly(finalState.stocks, newSnapshot, deviceId)
+    } catch (e) {
+      console.error('[Stocktake] Firestore直接書き込み失敗:', e)
+      // localStorageには保存済みのため次回起動時にsyncで復元される
+    }
+    setSaving(false)
     setActualCounts((prev) => ({ ...prev, [store]: {} }))
     setShowCompleteModal(false)
     setStatusFilter('すべて')
     setCategory('すべて')
+    setScreenTab('月次記録')
   }
 
   function exportCsv() {
@@ -336,8 +365,8 @@ export function Stocktake() {
           {screenTab === '棚卸実施' && (<>
           {/* ヘッダー */}
           <div className="px-6 pt-5 pb-4 bg-surface border-b border-border">
-            {/* 店舗タブ＋ボタン行 */}
-            <div className="flex gap-2 mb-4">
+            {/* 店舗タブ行 */}
+            <div className="flex gap-2 mb-2">
               {(['flag', 'lien'] as StoreTab[]).map((s) => (
                 <button
                   key={s}
@@ -352,8 +381,22 @@ export function Stocktake() {
                   {s === 'flag' ? 'flag 美容室' : 'Lien 美容室'}
                 </button>
               ))}
-              <div className="flex-1" />
+            </div>
+            {/* ボタン行 */}
+            <div className="flex gap-2 mb-4">
               <Btn variant="ghost" size="sm" onClick={exportCsv}>CSVエクスポート</Btn>
+              <Btn
+                variant="ghost"
+                size="sm"
+                disabled={draftSaved}
+                onClick={() => {
+                  setDraftSaved(true)
+                  setTimeout(() => setDraftSaved(false), 2500)
+                }}
+              >
+                {draftSaved ? '✓ 保存済み' : '一時保存'}
+              </Btn>
+              <div className="flex-1" />
               <Btn
                 variant="primary"
                 size="sm"
@@ -594,8 +637,10 @@ export function Stocktake() {
             )}
 
             <div className="flex gap-2">
-              <Btn variant="ghost" className="flex-1" onClick={() => setShowCompleteModal(false)}>キャンセル</Btn>
-              <Btn variant="primary" className="flex-[2]" onClick={completeStocktake}>✓ 完了する</Btn>
+              <Btn variant="ghost" className="flex-1" onClick={() => setShowCompleteModal(false)} disabled={saving}>キャンセル</Btn>
+              <Btn variant="primary" className="flex-[2]" onClick={completeStocktake} disabled={saving}>
+                {saving ? '保存中...' : '✓ 完了する'}
+              </Btn>
             </div>
           </div>
         </div>

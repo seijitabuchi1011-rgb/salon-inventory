@@ -1,6 +1,7 @@
-import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc } from 'firebase/firestore'
+import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc, arrayUnion } from 'firebase/firestore'
 import { db } from './firebase'
 import type { FirestoreData } from '../store'
+import type { StocktakeSnapshot, StoreStock } from '../types'
 
 // ─── ドキュメント参照 ────────────────────────────────────────────────────────
 // 増え続けるデータを別ドキュメントに分離して 1MB 上限を回避
@@ -53,14 +54,20 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
     onData(buildFull())
   }
 
+  // 5ドキュメントへの同時書き込みは各snapshotが個別に発火するため
+  // デバウンスして1回のonData呼び出しにまとめる（中間状態での不要なmergeを防ぐ）
+  let laterUpdateTimer: ReturnType<typeof setTimeout> | null = null
   function onLaterUpdate() {
     if (!allReadyFired || !mainSnap) return
-    onData(buildFull())
+    if (laterUpdateTimer) clearTimeout(laterUpdateTimer)
+    laterUpdateTimer = setTimeout(() => {
+      laterUpdateTimer = null
+      onData(buildFull())
+    }, 60)
   }
 
   // main ドキュメント（商品・在庫・設定など）
   const unsubMain = onSnapshot(MAIN_DOC, { includeMetadataChanges: true }, (snap) => {
-    if (snap.metadata.hasPendingWrites) return
     const isFirst = !mainReady
     mainReady = true
     if (snap.exists()) {
@@ -97,7 +104,6 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
 
   // 取引履歴ドキュメント
   const unsubTx = onSnapshot(TX_DOC, { includeMetadataChanges: true }, (snap) => {
-    if (snap.metadata.hasPendingWrites) return
     const isFirst = !txReady
     txReady = true; txExists = snap.exists()
     if (snap.exists()) transactions = (snap.data().items as FirestoreData['transactions']) ?? []
@@ -109,7 +115,6 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
 
   // 移動履歴ドキュメント
   const unsubTr = onSnapshot(TRANSFERS_DOC, { includeMetadataChanges: true }, (snap) => {
-    if (snap.metadata.hasPendingWrites) return
     const isFirst = !trReady
     trReady = true; trExists = snap.exists()
     if (snap.exists()) transfers = (snap.data().items as FirestoreData['transfers']) ?? []
@@ -121,7 +126,6 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
 
   // スタッフ購入ドキュメント
   const unsubSp = onSnapshot(SP_DOC, { includeMetadataChanges: true }, (snap) => {
-    if (snap.metadata.hasPendingWrites) return
     const isFirst = !spReady
     spReady = true; spExists = snap.exists()
     if (snap.exists()) staffPurchases = (snap.data().items as FirestoreData['staffPurchases']) ?? []
@@ -133,7 +137,6 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
 
   // スタッフ支払ドキュメント
   const unsubSpay = onSnapshot(SPAY_DOC, { includeMetadataChanges: true }, (snap) => {
-    if (snap.metadata.hasPendingWrites) return
     const isFirst = !spayReady
     spayReady = true; spayExists = snap.exists()
     if (snap.exists()) staffPayments = (snap.data().items as FirestoreData['staffPayments']) ?? []
@@ -210,6 +213,20 @@ export async function writeToFirestore(data: FirestoreData, deviceId?: string): 
     setDoc(SP_DOC,        { items: data.staffPurchases,  lastModified: now }),
     setDoc(SPAY_DOC,      { items: data.staffPayments,   lastModified: now }),
   ])
+}
+
+// 棚卸完了時の直接保存（syncループを経由せず確実に書き込む）
+export async function saveStocktakeDirectly(
+  stocks: StoreStock[],
+  snapshot: StocktakeSnapshot,
+  deviceId: string,
+): Promise<void> {
+  await setDoc(MAIN_DOC, {
+    stocks,
+    stocktakeSnapshots: arrayUnion(snapshot),
+    lastModified: Date.now(),
+    lastModifiedBy: deviceId,
+  }, { merge: true })
 }
 
 // ─── product-images コレクション（変更なし） ──────────────────────────────────
