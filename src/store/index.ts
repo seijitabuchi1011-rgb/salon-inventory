@@ -101,6 +101,7 @@ export interface FirestoreData {
   storeOrder: string[]
   appSettings: AppSettings
   stocktakeSnapshots: StocktakeSnapshot[]
+  stocktakeDraft?: { month: string; counts: Record<string, Record<string, number>> } | null
   categories: string[]
   makers: string[]
   dealers: string[]
@@ -153,6 +154,8 @@ interface AppState {
   stocktakeSnapshots: StocktakeSnapshot[]
   addStocktakeSnapshot: (s: Omit<StocktakeSnapshot, 'id'>) => void
   deleteStocktakeSnapshot: (id: string) => void
+  stocktakeDraft: { month: string; counts: Record<string, Record<string, number>> } | null
+  setStocktakeDraft: (draft: { month: string; counts: Record<string, Record<string, number>> } | null) => void
   categories: string[]
   addCategory: (name: string) => void
   removeCategory: (name: string) => void
@@ -1199,6 +1202,8 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           stocktakeSnapshots: state.stocktakeSnapshots.filter((s) => s.id !== id),
         })),
+      stocktakeDraft: null,
+      setStocktakeDraft: (draft) => set({ stocktakeDraft: draft }),
       categories: DEFAULT_CATEGORIES,
       addCategory: (name) =>
         set((state) => ({
@@ -1344,6 +1349,8 @@ export const useAppStore = create<AppState>()(
             staffPayments: [...spayMap.values()],
             transfers: [...trMap.values()],
             stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
+            // 棚卸ドラフト: Firestoreに値があれば採用（他端末の入力を反映）
+            stocktakeDraft: data.stocktakeDraft !== undefined ? data.stocktakeDraft : state.stocktakeDraft,
             // 商品・設定はFirestore側を採用（PCが管理）
             products: data.products
               ? data.products.map((fp) => ({
@@ -1380,6 +1387,7 @@ export const useAppStore = create<AppState>()(
         storeOrder: state.storeOrder,
         appSettings: state.appSettings,
         stocktakeSnapshots: state.stocktakeSnapshots,
+        stocktakeDraft: state.stocktakeDraft,
         categories: state.categories,
         makers: state.makers,
         dealers: state.dealers,

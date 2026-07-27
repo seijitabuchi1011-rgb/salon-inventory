@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Badge } from '../components/Badge'
@@ -187,7 +187,7 @@ function HistoryTab({
 }
 
 export function Stocktake() {
-  const { products, stocks, upsertStock, stocktakeSnapshots, addStocktakeSnapshot, deleteStocktakeSnapshot } = useAppStore()
+  const { products, stocks, upsertStock, stocktakeSnapshots, addStocktakeSnapshot, deleteStocktakeSnapshot, stocktakeDraft, setStocktakeDraft } = useAppStore()
   const [screenTab, setScreenTab] = useState<ScreenTab>('棚卸実施')
   const [store, setStore] = useState<StoreTab>('flag')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('すべて')
@@ -208,22 +208,14 @@ export function Stocktake() {
     return snap
   })
 
-  // 入力済み実棚数（localStorageに下書き保存して途中再開可能にする）
-  const DRAFT_KEY = 'salon-stocktake-draft'
-  const [actualCounts, setActualCounts] = useState<Record<string, Record<string, number>>>(() => {
-    const currentMonth = new Date().toISOString().slice(0, 7)
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY)
-      if (!raw) return { flag: {}, lien: {} }
-      const saved = JSON.parse(raw) as { month: string; counts: Record<string, Record<string, number>> }
-      if (saved.month !== currentMonth) return { flag: {}, lien: {} } // 月が変わったらリセット
-      return saved.counts ?? { flag: {}, lien: {} }
-    } catch { return { flag: {}, lien: {} } }
-  })
-  useEffect(() => {
-    const currentMonth = new Date().toISOString().slice(0, 7)
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ month: currentMonth, counts: actualCounts })) } catch { /* ignore */ }
-  }, [actualCounts])
+  // 入力済み実棚数: Zustand経由でFirestoreに同期（他端末でリアルタイム共有）
+  const currentMonth = new Date().toISOString().slice(0, 7)
+  const actualCounts: Record<string, Record<string, number>> =
+    (stocktakeDraft?.month === currentMonth ? stocktakeDraft.counts : null) ?? { flag: {}, lien: {} }
+  const setActualCounts = (updater: Record<string, Record<string, number>> | ((prev: Record<string, Record<string, number>>) => Record<string, Record<string, number>>)) => {
+    const newCounts = typeof updater === 'function' ? updater(actualCounts) : updater
+    setStocktakeDraft({ month: currentMonth, counts: newCounts })
+  }
 
   const month = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
 
@@ -314,7 +306,7 @@ export function Stocktake() {
       // localStorageには保存済みのため次回起動時にsyncで復元される
     }
     setSaving(false)
-    setActualCounts((prev) => ({ ...prev, [store]: {} }))
+    setStocktakeDraft({ month: currentMonth, counts: { ...actualCounts, [store]: {} } })
     setShowCompleteModal(false)
     setStatusFilter('すべて')
     setCategory('すべて')
