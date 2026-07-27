@@ -157,9 +157,9 @@ export function ProductEdit() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     doSave(existing?.id ?? String(Date.now()))
-    flushToFirestoreNow()
+    await flushToFirestoreNow()
     navigate('/products', { state: { category: backCategory }, replace: true })
   }
 
