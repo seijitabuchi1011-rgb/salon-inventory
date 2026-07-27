@@ -1351,13 +1351,19 @@ export const useAppStore = create<AppState>()(
             stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
             // 棚卸ドラフト: Firestoreに値があれば採用（他端末の入力を反映）
             stocktakeDraft: data.stocktakeDraft !== undefined ? data.stocktakeDraft : state.stocktakeDraft,
-            // 商品・設定はFirestore側を採用（PCが管理）
-            products: data.products
-              ? data.products.map((fp) => ({
-                  ...fp,
-                  image: state.products.find((lp) => lp.id === fp.id)?.image,
-                }))
-              : state.products,
+            // 商品: FirestoreをベースにIDユニオン。未同期のローカル追加商品を保持する。
+            // （起動時にIndexedDBキャッシュが古い場合でもローカルの新規商品が消えないようにする）
+            products: (() => {
+              if (!data.products) return state.products
+              const productMap = new Map<string, Product>()
+              for (const fp of data.products) {
+                productMap.set(fp.id, { ...fp, image: state.products.find((lp) => lp.id === fp.id)?.image })
+              }
+              for (const lp of state.products) {
+                if (!productMap.has(lp.id)) productMap.set(lp.id, lp)
+              }
+              return [...productMap.values()]
+            })(),
             staffMembers: data.staffMembers ?? state.staffMembers,
             storeInfo: data.storeInfo ?? state.storeInfo,
             storeOrder: data.storeOrder ?? state.storeOrder,
