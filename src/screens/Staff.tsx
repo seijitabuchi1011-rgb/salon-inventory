@@ -201,12 +201,13 @@ export function StaffScreen() {
   })
 
   // 残高計算（特定スタッフ選択時）
+  // 卸しは支払い不要のため purchaseTotal・totalAmount から除外
   const staffEntries = selectedStaff === '全員' ? allEntries : allEntries.filter((e) => e.person === selectedStaff)
-  const purchaseTotal = staffEntries.filter((e) => e.entryType !== 'payment').reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
+  const purchaseTotal = staffEntries.filter((e) => e.entryType === 'purchase').reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
   const paymentTotal = staffEntries.filter((e) => e.entryType === 'payment').reduce((sum, e) => sum + e.priceIncTax, 0)
   const balance = purchaseTotal - paymentTotal
 
-  const totalAmount = filtered.filter((e) => e.entryType !== 'payment').reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
+  const totalAmount = filtered.filter((e) => e.entryType === 'purchase').reduce((sum, e) => sum + e.priceIncTax * e.quantity, 0)
   const totalPaid = filtered.filter((e) => e.entryType === 'payment').reduce((sum, e) => sum + e.priceIncTax, 0)
 
   // スタッフ一覧（購入者 + 卸した人）
