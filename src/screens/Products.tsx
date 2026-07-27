@@ -478,7 +478,13 @@ export function Products() {
   )
 
   // 画面を開いた時にFirestoreから最新データを強制取得（PC→iPad同期を確実にする）
-  useEffect(() => { forceSyncFromFirestore() }, [])
+  // ただし保存直後の遷移はスキップ（onSnapshotが追いつく前に古いデータで上書きするのを防ぐ）
+  useEffect(() => {
+    const state = location.state as { justSaved?: boolean } | null
+    if (!state?.justSaved) {
+      forceSyncFromFirestore()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)

@@ -160,7 +160,7 @@ export function ProductEdit() {
   const handleSave = async () => {
     doSave(existing?.id ?? String(Date.now()))
     await flushToFirestoreNow()
-    navigate('/products', { state: { category: backCategory }, replace: true })
+    navigate('/products', { state: { category: backCategory, justSaved: true }, replace: true })
   }
 
   const handleSaveAndNext = () => {
