@@ -14,6 +14,7 @@ export interface Product {
   memo?: string
   dealer?: string
   dealerRep?: string
+  lastModified?: number
 }
 
 export interface StaffPurchase {

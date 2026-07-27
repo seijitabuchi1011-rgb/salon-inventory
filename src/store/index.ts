@@ -998,11 +998,12 @@ export const useAppStore = create<AppState>()(
       stocks: initialStocks,
       upsertProduct: (product) =>
         set((state) => {
+          const stamped = { ...product, lastModified: Date.now() }
           const exists = state.products.some((p) => p.id === product.id)
           return {
             products: exists
-              ? state.products.map((p) => (p.id === product.id ? product : p))
-              : [...state.products, product],
+              ? state.products.map((p) => (p.id === product.id ? stamped : p))
+              : [...state.products, stamped],
           }
         }),
       upsertStock: (stock) =>
@@ -1351,13 +1352,22 @@ export const useAppStore = create<AppState>()(
             stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
             // 棚卸ドラフト: Firestoreに値があれば採用（他端末の入力を反映）
             stocktakeDraft: data.stocktakeDraft !== undefined ? data.stocktakeDraft : state.stocktakeDraft,
-            // 商品: FirestoreをベースにIDユニオン。未同期のローカル追加商品を保持する。
-            // （起動時にIndexedDBキャッシュが古い場合でもローカルの新規商品が消えないようにする）
+            // 商品: タイムスタンプで新しい方を優先（在庫と同じ戦略）。
+            // ローカルで編集直後はlastModifiedが新しいためFirestoreの古いデータで上書きされない。
+            // Firestoreに存在しないローカル追加商品は保持する。
+            // 画像はローカルを優先（別途Firebase Storageで同期）。
             products: (() => {
               if (!data.products) return state.products
+              const localMap = new Map(state.products.map((p) => [p.id, p]))
               const productMap = new Map<string, Product>()
               for (const fp of data.products) {
-                productMap.set(fp.id, { ...fp, image: state.products.find((lp) => lp.id === fp.id)?.image })
+                const lp = localMap.get(fp.id)
+                // ローカルの方が新しい場合はローカルを優先
+                if (lp && (lp.lastModified ?? 0) > (fp.lastModified ?? 0)) {
+                  productMap.set(fp.id, lp)
+                } else {
+                  productMap.set(fp.id, { ...fp, image: lp?.image })
+                }
               }
               for (const lp of state.products) {
                 if (!productMap.has(lp.id)) productMap.set(lp.id, lp)
