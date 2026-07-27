@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { forceSyncFromFirestore } from '../hooks/useFirestoreSync'
 import {
   DndContext,
   closestCenter,
@@ -475,6 +476,9 @@ export function Products() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   )
+
+  // 画面を開いた時にFirestoreから最新データを強制取得（PC→iPad同期を確実にする）
+  useEffect(() => { forceSyncFromFirestore() }, [])
 
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)

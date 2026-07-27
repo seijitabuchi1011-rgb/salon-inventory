@@ -22,9 +22,21 @@ async function pushToFirestore(
 
 // 保存ボタンなど「即時書き込みが必要なタイミング」からコールできるモジュールレベル関数
 let _immediateFlush: (() => Promise<void>) | null = null
+// isMergingRef への参照（forceSyncNow で write-back を防ぐために使用）
+let _isMergingRef: { current: boolean } | null = null
 
 export function flushToFirestoreNow(): Promise<void> {
   return _immediateFlush?.() ?? Promise.resolve()
+}
+
+// Firestoreから強制再読み込みしてマージ（write-backを起こさずに最新データを反映）
+export function forceSyncFromFirestore(): Promise<void> {
+  return readFromFirestore().then((data) => {
+    if (!data) return
+    if (_isMergingRef) _isMergingRef.current = true
+    useAppStore.getState().mergeFromFirestore(data)
+    if (_isMergingRef) _isMergingRef.current = false
+  }).catch((e) => console.error('[Firestore force sync]', e))
 }
 
 export function useFirestoreSync() {
@@ -46,8 +58,10 @@ export function useFirestoreSync() {
         .then(() => console.log('[Firestore] immediate flush: success'))
         .catch((e) => console.error('[Firestore] immediate flush: FAILED', e))
     }
+    // forceSyncFromFirestore が isMergingRef にアクセスできるよう登録
+    _isMergingRef = isMergingRef
 
-    return () => { _immediateFlush = null }
+    return () => { _immediateFlush = null; _isMergingRef = null }
   }, [])
 
   useEffect(() => {
