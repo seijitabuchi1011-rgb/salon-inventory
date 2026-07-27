@@ -178,6 +178,115 @@ function StockEditSheet({
   )
 }
 
+function PriceEditSheet({
+  product,
+  onSave,
+  onClose,
+}: {
+  product: Product
+  onSave: (purchasePrice: number, sellPrice: number, taxRate: 8 | 10) => void
+  onClose: () => void
+}) {
+  const [purchasePrice, setPurchasePrice] = useState(String(product.purchasePrice ?? 0))
+  const [sellPrice, setSellPrice] = useState(String(product.sellPrice ?? 0))
+  const [taxRate, setTaxRate] = useState<8 | 10>(product.taxRate ?? 10)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(t)
+  }, [])
+
+  function handleClose() {
+    setVisible(false)
+    setTimeout(onClose, 220)
+  }
+
+  function handleSave() {
+    const pp = parseInt(purchasePrice, 10)
+    const sp = parseInt(sellPrice, 10)
+    if (isNaN(pp) || isNaN(sp)) return
+    onSave(pp, sp, taxRate)
+    handleClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div
+        onClick={handleClose}
+        className="absolute inset-0 bg-black/40 transition-opacity duration-200"
+        style={{ opacity: visible ? 1 : 0 }}
+      />
+      <div
+        className="relative bg-surface rounded-t-2xl shadow-2xl transition-transform duration-220"
+        style={{ transform: visible ? 'translateY(0)' : 'translateY(100%)' }}
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-border-strong" />
+        </div>
+        <div className="px-5 pt-2 pb-3 border-b border-border">
+          <p className="text-xs text-faint font-mono truncate">{product.barcode}</p>
+          <p className="font-bold text-text text-base leading-snug mt-0.5">{product.name}</p>
+        </div>
+        <div className="px-5 py-4 flex gap-6">
+          <div className="flex-1">
+            <p className="text-xs text-muted mb-1.5">仕入単価（円）</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={purchasePrice}
+              onChange={(e) => setPurchasePrice(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              className="w-full h-10 px-3 text-right text-base font-bold tabular-nums border border-border rounded-lg bg-surface text-text outline-none focus:border-accent"
+            />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-muted mb-1.5">売価（円）</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={sellPrice}
+              onChange={(e) => setSellPrice(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              className="w-full h-10 px-3 text-right text-base font-bold tabular-nums border border-border rounded-lg bg-surface text-text outline-none focus:border-accent"
+            />
+          </div>
+          <div className="flex-shrink-0">
+            <p className="text-xs text-muted mb-1.5">税率</p>
+            <div className="flex gap-1">
+              {([8, 10] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setTaxRate(r)}
+                  className={`w-14 h-10 rounded-lg text-sm font-bold border transition-colors ${
+                    taxRate === r ? 'bg-accent text-white border-accent' : 'bg-bg border-border text-muted'
+                  }`}
+                >
+                  {r}%
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-8 pt-2 flex gap-3 border-t border-border">
+          <button
+            onClick={handleClose}
+            className="flex-1 h-11 rounded-xl border border-border text-sm font-semibold text-muted"
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 h-11 rounded-xl bg-accent text-white text-sm font-bold"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function stockStatus(current: number, min: number): { label: string; variant: 'danger' | 'warn' | 'ok' } {
   if (current <= min) return { label: '不足', variant: 'danger' }
   if (current <= min * 1.5) return { label: '少', variant: 'warn' }
@@ -221,6 +330,7 @@ function SortableRow({
   onToggleFlagActive,
   onToggleLienActive,
   onEditStock,
+  onEditPrice,
 }: {
   p: Product
   flagStock: StoreStock | undefined
@@ -232,6 +342,7 @@ function SortableRow({
   onToggleFlagActive: () => void
   onToggleLienActive: () => void
   onEditStock: () => void
+  onEditPrice: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id })
 
@@ -292,6 +403,13 @@ function SortableRow({
         <div className="text-2xs text-faint font-mono mt-0.5">{p.barcode}</div>
       </td>
       <td className="px-4 py-3 text-xs text-muted cursor-pointer" onClick={onNavigate}>{p.category}</td>
+      <td
+        className="px-4 py-3 text-right tabular-nums cursor-pointer select-none"
+        onClick={(e) => { e.stopPropagation(); onEditPrice() }}
+      >
+        <span className="text-xs font-bold text-text">¥{(p.purchasePrice ?? 0).toLocaleString()}</span>
+        <span className="text-2xs text-faint block">税{p.taxRate ?? 10}%</span>
+      </td>
       {/* flag 取扱トグル */}
       <td className="px-2 py-3 w-16 text-center" onClick={(e) => e.stopPropagation()}>
         <ActiveToggle active={flagActive} color="flag" onToggle={onToggleFlagActive} />
@@ -341,7 +459,7 @@ function SortableRow({
 export function Products() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { currentStore, products, stocks, upsertStock, deleteProduct, bulkDeleteProducts, reorderProducts, bulkUpdateCategory, categories } = useAppStore()
+  const { currentStore, products, stocks, upsertStock, upsertProduct, deleteProduct, bulkDeleteProducts, reorderProducts, bulkUpdateCategory, categories } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>(
     (location.state as { category?: string } | null)?.category ?? 'すべて'
@@ -351,6 +469,7 @@ export function Products() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState('')
   const [editProductId, setEditProductId] = useState<string | null>(null)
+  const [priceEditProductId, setPriceEditProductId] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -486,6 +605,7 @@ export function Products() {
                   <th className="text-left px-3 py-3 text-xs font-semibold text-muted w-12"></th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-24">カテゴリ</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">仕入単価</th>
                   <th className="text-center px-2 py-3 text-xs font-semibold w-16" style={{ color: '#1B5EB8' }}>flag<br/>取扱</th>
                   <th className="text-center px-2 py-3 text-xs font-semibold w-16" style={{ color: '#7B2FA8' }}>Lien<br/>取扱</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">flag在庫</th>
@@ -511,6 +631,7 @@ export function Products() {
                         onToggleFlagActive={() => toggleActive(p.id, 'flag')}
                         onToggleLienActive={() => toggleActive(p.id, 'lien')}
                         onEditStock={() => setEditProductId(p.id)}
+                        onEditPrice={() => setPriceEditProductId(p.id)}
                       />
                     ))}
                   </tbody>
@@ -573,6 +694,21 @@ export function Products() {
             onSave={(flag, lien) => {
               upsertStock({ productId: p.id, storeId: 'flag', currentStock: flag.currentStock, minStock: flag.minStock, active: fs?.active ?? true })
               upsertStock({ productId: p.id, storeId: 'lien', currentStock: lien.currentStock, minStock: lien.minStock, active: ls?.active ?? true })
+            }}
+          />
+        )
+      })()}
+
+      {/* 価格クイック編集シート */}
+      {priceEditProductId && (() => {
+        const p = products.find((x) => x.id === priceEditProductId)
+        if (!p) return null
+        return (
+          <PriceEditSheet
+            product={p}
+            onClose={() => setPriceEditProductId(null)}
+            onSave={(purchasePrice, sellPrice, taxRate) => {
+              upsertProduct({ ...p, purchasePrice, sellPrice, taxRate })
             }}
           />
         )
