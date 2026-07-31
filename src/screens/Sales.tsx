@@ -112,7 +112,7 @@ export function Sales() {
   const totalQty = filtered.reduce((sum, t) => sum + t.quantity, 0)
   const totalAmount = filtered.reduce((sum, t) => {
     const p = products.find((pr) => pr.id === t.productId)
-    return sum + (p?.sellPrice ?? 0) * t.quantity
+    return sum + (p?.purchasePrice ?? 0) * t.quantity
   }, 0)
   const avgPrice = totalQty > 0 ? Math.round(totalAmount / totalQty) : 0
   const distinctProducts = new Set(filtered.map((t) => t.productId)).size
@@ -121,7 +121,7 @@ export function Sales() {
   const productMap = new Map<string, { qty: number; amount: number }>()
   filtered.forEach((t) => {
     const p = products.find((pr) => pr.id === t.productId)
-    const amount = (p?.sellPrice ?? 0) * t.quantity
+    const amount = (p?.purchasePrice ?? 0) * t.quantity
     const e = productMap.get(t.productId)
     if (e) { e.qty += t.quantity; e.amount += amount }
     else productMap.set(t.productId, { qty: t.quantity, amount })
@@ -148,7 +148,7 @@ export function Sales() {
     storeOrder.forEach((sid) => {
       byStore[sid] = dispenses
         .filter((t) => t.storeId === sid && t.timestamp >= dayStart && t.timestamp <= dayEnd)
-        .reduce((sum, t) => sum + (products.find((p) => p.id === t.productId)?.sellPrice ?? 0) * t.quantity, 0)
+        .reduce((sum, t) => sum + (products.find((p) => p.id === t.productId)?.purchasePrice ?? 0) * t.quantity, 0)
     })
     const total = Object.values(byStore).reduce((s, v) => s + v, 0)
     return { date: label, byStore, total }
@@ -253,7 +253,7 @@ export function Sales() {
               <Card className="flex flex-col gap-0.5 py-2">
                 <span className="text-2xs text-muted font-semibold">払出金額</span>
                 <span className="text-2xl font-bold text-text">{fmt(totalAmount)}</span>
-                <span className="text-2xs text-faint">払出数×売価</span>
+                <span className="text-2xs text-faint">払出数×仕入単価</span>
               </Card>
               <Card className="flex flex-col gap-0.5 py-2">
                 <span className="text-2xs text-muted font-semibold">払出点数</span>
@@ -452,7 +452,7 @@ export function Sales() {
                       <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                       <th className="text-center px-3 py-3 text-xs font-semibold text-muted w-20">店舗</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-16">数量</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-28">売価(税抜)</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-28">仕入単価</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-28">小計</th>
                       <th className="w-10" />
                     </tr>
@@ -460,7 +460,7 @@ export function Sales() {
                   <tbody>
                     {filtered.map((t) => {
                       const p = products.find((pr) => pr.id === t.productId)
-                      const unit = p?.sellPrice ?? 0
+                      const unit = p?.purchasePrice ?? 0
                       const subtotal = unit * t.quantity
                       const dateStr = new Date(t.timestamp).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
                       return (
@@ -574,7 +574,7 @@ export function Sales() {
                 <div className="border border-accent rounded-md p-3 bg-accent-soft flex items-center gap-3">
                   <div className="flex-1">
                     <p className="text-sm font-bold text-text">{selectedProduct.name}</p>
-                    <p className="text-xs text-muted mt-0.5">売価 ¥{selectedProduct.sellPrice.toLocaleString()}</p>
+                    <p className="text-xs text-muted mt-0.5">仕入単価 ¥{selectedProduct.purchasePrice.toLocaleString()}</p>
                   </div>
                   <button onMouseDown={() => setForm((f) => ({ ...f, productId: '', productSearch: '' }))}
                     className="text-xs text-muted hover:text-text px-2 py-1">✕ 変更</button>
@@ -594,7 +594,7 @@ export function Sales() {
                           onMouseDown={() => setForm((f) => ({ ...f, productId: p.id, productSearch: p.name }))}
                           className="w-full text-left px-3 py-2.5 text-sm hover:bg-bg flex items-center justify-between border-b border-border last:border-0">
                           <span className="font-medium truncate">{p.name}</span>
-                          <span className="text-xs text-muted ml-2 flex-shrink-0">¥{p.sellPrice.toLocaleString()}</span>
+                          <span className="text-xs text-muted ml-2 flex-shrink-0">¥{p.purchasePrice.toLocaleString()}</span>
                         </button>
                       ))}
                     </div>
