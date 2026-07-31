@@ -37,6 +37,26 @@ function pruneDeletedTxIds(firestoreTxIds: Set<string>) {
     localStorage.setItem(DELETED_TX_KEY, JSON.stringify(kept))
   } catch { /* ignore */ }
 }
+
+// 移動履歴削除のtombstone（取消後にonSnapshotキャッシュで復活するのを防ぐ）
+const DELETED_TR_KEY = 'salon-deleted-tr-ids'
+function readDeletedTrIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(DELETED_TR_KEY) ?? '[]')) } catch { return new Set() }
+}
+function appendDeletedTrId(id: string) {
+  try {
+    const ids = readDeletedTrIds()
+    ids.add(id)
+    localStorage.setItem(DELETED_TR_KEY, JSON.stringify([...ids].slice(-200)))
+  } catch { /* QuotaExceeded → 諦める */ }
+}
+function pruneDeletedTrIds(firestoreTrIds: Set<string>) {
+  try {
+    const ids = readDeletedTrIds()
+    const kept = [...ids].filter(id => firestoreTrIds.has(id))
+    localStorage.setItem(DELETED_TR_KEY, JSON.stringify(kept))
+  } catch { /* ignore */ }
+}
 import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot, StaffPayment } from '../types'
 
 export interface StoreInfo {
@@ -1146,6 +1166,7 @@ export const useAppStore = create<AppState>()(
         }),
       deleteTransfer: (id) =>
         set((state) => {
+          appendDeletedTrId(id)
           const tr = state.transfers.find((t) => t.id === id)
           if (!tr) return state
           let stocks = state.stocks
@@ -1274,7 +1295,7 @@ export const useAppStore = create<AppState>()(
             })),
             stocks: data.stocks ?? state.stocks,
             transactions: (data.transactions ?? state.transactions).filter((t) => !deletedIds.has(t.id)),
-            transfers: data.transfers ?? state.transfers,
+            transfers: (data.transfers ?? state.transfers).filter((t) => !readDeletedTrIds().has(t.id)),
             staffPurchases: data.staffPurchases ?? state.staffPurchases,
             staffPayments: data.staffPayments ?? state.staffPayments,
             staffMembers: data.staffMembers ?? state.staffMembers,
@@ -1331,10 +1352,20 @@ export const useAppStore = create<AppState>()(
             if (!spayMap.has(p.id)) spayMap.set(p.id, p)
           }
 
-          // 移動履歴: IDで重複排除統合（status更新はFirestore側を優先）
+          // 移動履歴: Firestore側を基準としてtombstone適用（取消後キャッシュ復活を防止）
+          const firestoreTrIds = new Set((data.transfers ?? []).map((t) => t.id))
+          pruneDeletedTrIds(firestoreTrIds)
+          const deletedTrIds = readDeletedTrIds()
           const trMap = new Map<string, Transfer>()
-          for (const t of [...state.transfers, ...(data.transfers ?? [])]) {
-            trMap.set(t.id, t) // Firestore側（後に処理）が同一IDを上書き
+          // Firestoreのデータを基準として採用（別端末のstatus更新も反映）
+          for (const t of (data.transfers ?? [])) {
+            trMap.set(t.id, t)
+          }
+          // ローカルにのみ存在する移動（debounce中で未書き込み）を保持
+          for (const t of state.transfers) {
+            if (!firestoreTrIds.has(t.id) && !deletedTrIds.has(t.id)) {
+              trMap.set(t.id, t)
+            }
           }
 
           // 棚卸スナップショット: IDで重複排除統合（完了記録を両端末で保持）
@@ -1348,7 +1379,7 @@ export const useAppStore = create<AppState>()(
             transactions: mergedTx,
             staffPurchases: [...spMap.values()],
             staffPayments: [...spayMap.values()],
-            transfers: [...trMap.values()],
+            transfers: [...trMap.values()].filter((t) => !deletedTrIds.has(t.id)),
             stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
             // 棚卸ドラフト: Firestoreに値があれば採用（他端末の入力を反映）
             stocktakeDraft: data.stocktakeDraft !== undefined ? data.stocktakeDraft : state.stocktakeDraft,

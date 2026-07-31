@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import { forceSyncFromFirestore } from '../hooks/useFirestoreSync'
 import { sendNotification } from '../lib/email'
 import type { StoreId } from '../types'
 
@@ -13,6 +14,8 @@ export function Transfer() {
     approveTransfer, rejectTransfer,
     appSettings,
   } = useAppStore()
+
+  useEffect(() => { forceSyncFromFirestore() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const defaultFrom: StoreId = storeOrder[0] ?? 'flag'
   const defaultTo: StoreId = storeOrder[1] ?? 'lien'
