@@ -1352,21 +1352,12 @@ export const useAppStore = create<AppState>()(
             if (!spayMap.has(p.id)) spayMap.set(p.id, p)
           }
 
-          // 移動履歴: Firestore側を基準としてtombstone適用（取消後キャッシュ復活を防止）
+          // 移動履歴: Firestoreを完全な権威的ソースとして扱う
+          // UI操作後はflushToFirestoreNow()で即時書き込みするため、
+          // ローカルのみのデータを保持する必要がない（保持するとPC→iPad削除で復活するバグの原因になる）
           const firestoreTrIds = new Set((data.transfers ?? []).map((t) => t.id))
           pruneDeletedTrIds(firestoreTrIds)
           const deletedTrIds = readDeletedTrIds()
-          const trMap = new Map<string, Transfer>()
-          // Firestoreのデータを基準として採用（別端末のstatus更新も反映）
-          for (const t of (data.transfers ?? [])) {
-            trMap.set(t.id, t)
-          }
-          // ローカルにのみ存在する移動（debounce中で未書き込み）を保持
-          for (const t of state.transfers) {
-            if (!firestoreTrIds.has(t.id) && !deletedTrIds.has(t.id)) {
-              trMap.set(t.id, t)
-            }
-          }
 
           // 棚卸スナップショット: IDで重複排除統合（完了記録を両端末で保持）
           const snapMap = new Map<string, StocktakeSnapshot>()
@@ -1379,7 +1370,7 @@ export const useAppStore = create<AppState>()(
             transactions: mergedTx,
             staffPurchases: [...spMap.values()],
             staffPayments: [...spayMap.values()],
-            transfers: [...trMap.values()].filter((t) => !deletedTrIds.has(t.id)),
+            transfers: (data.transfers ?? []).filter((t) => !deletedTrIds.has(t.id)),
             stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
             // 棚卸ドラフト: Firestoreに値があれば採用（他端末の入力を反映）
             stocktakeDraft: data.stocktakeDraft !== undefined ? data.stocktakeDraft : state.stocktakeDraft,

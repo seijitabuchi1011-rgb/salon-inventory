@@ -330,13 +330,13 @@ export function Transfer() {
                     {tr.status === '承認待ち' ? (
                       <div className="flex gap-1 flex-shrink-0">
                         <button
-                          onClick={() => approveTransfer(tr.id)}
+                          onClick={async () => { approveTransfer(tr.id); await flushToFirestoreNow() }}
                           className="text-xs bg-green-600 text-white px-2 py-1 rounded font-semibold"
                         >
                           承認
                         </button>
                         <button
-                          onClick={() => rejectTransfer(tr.id)}
+                          onClick={async () => { rejectTransfer(tr.id); await flushToFirestoreNow() }}
                           className="text-xs bg-red-500 text-white px-2 py-1 rounded font-semibold"
                         >
                           却下
