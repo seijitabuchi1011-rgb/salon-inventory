@@ -1410,7 +1410,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'salon-inventory-store',
       storage: createJSONStorage(() => safeLocalStorage),
-      version: 9,
+      version: 10,
       partialize: (state) => ({
         // 画像はFirestoreの別コレクションで管理するためlocalStorageには保存しない
         // （保存するとQuotaExceededErrorでsetItem全体がサイレント失敗する原因になる）
@@ -1493,7 +1493,10 @@ export const useAppStore = create<AppState>()(
           return { products: initialProducts, stocks: initialStocks, transactions: [], transfers: [], staffPurchases: [], staffPayments: [], staffMembers: [], storeInfo, storeOrder, appSettings, stocktakeSnapshots: [], categories, makers, dealers, dealerReps }
         }
 
-        return { products, stocks, transactions, transfers, staffPurchases, staffPayments, staffMembers, storeInfo, storeOrder, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
+        // v10: 移動履歴をlocalStorageからリセット（Firestoreを唯一の正とする）
+        // PC側に残った古い移動履歴がFirestoreに書き戻されるバグを根絶する
+        const cleanTransfers = fromVersion < 10 ? [] : transfers
+        return { products, stocks, transactions, transfers: cleanTransfers, staffPurchases, staffPayments, staffMembers, storeInfo, storeOrder, appSettings, stocktakeSnapshots, categories, makers, dealers, dealerReps }
       },
     }
   )
