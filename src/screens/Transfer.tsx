@@ -3,7 +3,7 @@ import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
-import { forceSyncFromFirestore } from '../hooks/useFirestoreSync'
+import { forceSyncFromFirestore, flushToFirestoreNow } from '../hooks/useFirestoreSync'
 import { sendNotification } from '../lib/email'
 import type { StoreId } from '../types'
 
@@ -83,7 +83,7 @@ export function Transfer() {
     setMemo('')
   }
 
-  function handleTransfer() {
+  async function handleTransfer() {
     if (!selectedId || qty <= 0) return
     directTransfer(fromStore, toStore, selectedId, qty, memo || undefined)
     const name = selectedProduct?.name ?? ''
@@ -98,6 +98,7 @@ export function Transfer() {
     clearProduct()
     setMemo('')
     setQty(1)
+    await flushToFirestoreNow()
   }
 
   const history = transfers.filter((t) => t.status !== '却下')
@@ -343,9 +344,10 @@ export function Transfer() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (confirm('この移動を取り消しますか？在庫も元に戻ります。')) {
                             deleteTransfer(tr.id)
+                            await flushToFirestoreNow()
                           }
                         }}
                         className="text-xs text-muted border border-border px-2 py-1 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors flex-shrink-0"
