@@ -188,9 +188,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     const active = s?.active ?? true
     const stock = s?.currentStock ?? 0
     const low = active && s != null && s.currentStock <= s.minStock
-    const monthCount = thisMonthTx
-      .filter((t) => t.productId === productId && t.storeId === storeId)
-      .reduce((sum, t) => sum + t.quantity, 0)
+
 
     if (!active) {
       return (
@@ -215,11 +213,6 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
           >
             {stock}
           </button>
-          {monthCount > 0 && (
-            <p className={`text-xs font-bold tabular-nums mt-0.5 ${isReceive ? 'text-ok' : 'text-danger'}`}>
-              今月{isReceive ? '+' : '−'}{monthCount}
-            </p>
-          )}
         </td>
 
         {/* ワンタッチ ＋/ー */}
@@ -344,6 +337,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
+                  <th className={`text-right px-4 py-3 text-xs font-semibold w-20 ${isReceive ? 'text-ok' : 'text-danger'}`}>今月</th>
                   {visibleStores.map((sid) => (
                     <>
                       <th key={sid + '-stock'} className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: storeInfo[sid]?.color ?? '#888888' }}>
@@ -365,6 +359,16 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                   <tr key={p.id} className="border-b border-border hover:bg-bg transition-colors">
                     <td className="px-4 py-2 font-semibold text-text">{p.name}</td>
                     <td className="px-4 py-2 text-xs text-muted">{p.category}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {(() => {
+                        const cnt = thisMonthTx
+                          .filter((t) => t.productId === p.id && visibleStores.includes(t.storeId))
+                          .reduce((sum, t) => sum + t.quantity, 0)
+                        return cnt > 0
+                          ? <span className={`text-sm font-bold ${isReceive ? 'text-ok' : 'text-danger'}`}>{isReceive ? '+' : '−'}{cnt}</span>
+                          : <span className="text-xs text-faint">−</span>
+                      })()}
+                    </td>
                     {visibleStores.map((sid) => (
                       <StoreCell key={sid} productId={p.id} productName={p.name} storeId={sid} />
                     ))}
