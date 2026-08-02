@@ -45,13 +45,15 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
 
   const isReceive = tab === 'receive'
 
-  // 今月の仕入れ件数（ヘッダー表示用）
+  // 今月の仕入れ・払出し集計
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime()
-  const thisMonthReceiveCount = transactions.filter(
-    (t) => t.type === 'receive' && t.timestamp >= monthStart && t.timestamp <= monthEnd
-  ).length
+  const thisMonthTx = transactions.filter(
+    (t) => t.type === (isReceive ? 'receive' : 'dispense') &&
+    t.timestamp >= monthStart && t.timestamp <= monthEnd
+  )
+  const thisMonthTotal = thisMonthTx.reduce((sum, t) => sum + t.quantity, 0)
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -186,6 +188,9 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     const active = s?.active ?? true
     const stock = s?.currentStock ?? 0
     const low = active && s != null && s.currentStock <= s.minStock
+    const monthCount = thisMonthTx
+      .filter((t) => t.productId === productId && t.storeId === storeId)
+      .reduce((sum, t) => sum + t.quantity, 0)
 
     if (!active) {
       return (
@@ -210,6 +215,11 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
           >
             {stock}
           </button>
+          {monthCount > 0 && (
+            <p className={`text-xs font-bold tabular-nums mt-0.5 ${isReceive ? 'text-ok' : 'text-danger'}`}>
+              今月{isReceive ? '+' : '−'}{monthCount}
+            </p>
+          )}
         </td>
 
         {/* ワンタッチ ＋/ー */}
@@ -289,11 +299,11 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
                     ? '緑の ＋ をタップで即カウントアップ。数字をタップで任意入力'
                     : '赤の − をタップで即カウントダウン。数字をタップで任意入力'}
                 </p>
-                {isReceive && (
-                  <span className="text-xs font-bold text-ok bg-ok-soft px-2 py-1 rounded-full flex-shrink-0">
-                    今月 {thisMonthReceiveCount}件 (全{transactions.length}件)
-                  </span>
-                )}
+                <span className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ${
+                  isReceive ? 'text-ok bg-ok-soft' : 'text-danger bg-danger-soft'
+                }`}>
+                  今月 {isReceive ? '+' : '−'}{thisMonthTotal}個
+                </span>
               </div>
             )}
 
