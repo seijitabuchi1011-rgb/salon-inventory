@@ -68,31 +68,34 @@ export function useFirestoreSync() {
     const myId = deviceId.current
     let isFirstSnapshot = true
 
+    // オフライン時のフォールバック: サーバースナップショットが10秒来なければ書き込み許可
+    // （オンライン時はサーバー確認後にのみsyncReadyRef=trueにして、
+    //   キャッシュの古いデータがFirestoreに書き戻されるのを防ぐ）
+    const offlineFallbackTimer = setTimeout(() => {
+      if (!syncReadyRef.current) {
+        syncReadyRef.current = true
+      }
+    }, 10000)
+
     const unsubscribe = subscribeToFirestore({
-      onData: (data) => {
+      onData: (data, fromCache) => {
         if (isFirstSnapshot) {
           isFirstSnapshot = false
-          // 起動時は常にmergeFromFirestoreでローカルの変更を保護する
-          // isMergingRef=trueでdebounceをブロックし、ピンポンを防止
-          // ※ 起動時のwrite-backは廃止: persistentLocalCacheにより最初のonDataが
-          //   IndexedDBキャッシュ（古いデータ）から来ることがあり、古いデータを
-          //   Firestoreに書き戻すとPCの新しい変更が上書きされてしまうため。
-          //   オフライン中の変更はFirestoreのオフラインキューが自動的にサーバーに送信する。
+          // 起動時はmergeFromFirestoreでローカルの変更を保護する
           isMergingRef.current = true
           useAppStore.getState().mergeFromFirestore(data)
           isMergingRef.current = false
-          syncReadyRef.current = true
+          // キャッシュデータの場合は書き込みを保留: サーバー確認後にsyncReady=trueにする
+          // これにより古いIndexedDBキャッシュが書き戻されるのを防ぐ
+          if (!fromCache) syncReadyRef.current = true
           return
         }
 
-        // 常にmergeFromFirestoreでデータを統合する（自分の書き込みも含む）
-        // isMergingRef=trueの間はdebounce（write-back）をブロックしてピンポンを防止
-        // ※ firestoreDeviceId === myIdのスキップを廃止: 起動時のwrite-back確認が
-        //   PC側スナップショットより後に届くと lastModifiedBy がiPad自身のIDになり
-        //   PCの変更が永遠にskipされるレースコンディションが発生するため
         isMergingRef.current = true
         useAppStore.getState().mergeFromFirestore(data)
         isMergingRef.current = false
+        // サーバーデータが届いたら書き込み許可
+        if (!syncReadyRef.current) syncReadyRef.current = true
       },
       onEmpty: () => {
         isFirstSnapshot = false
@@ -106,7 +109,7 @@ export function useFirestoreSync() {
       },
     })
 
-    return unsubscribe
+    return () => { unsubscribe(); clearTimeout(offlineFallbackTimer) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -12,7 +12,7 @@ const SP_DOC        = doc(db, 'salon-data', 'staffPurchases')
 const SPAY_DOC      = doc(db, 'salon-data', 'staffPayments')
 
 type Callbacks = {
-  onData: (data: FirestoreData) => void
+  onData: (data: FirestoreData, fromCache: boolean) => void
   onEmpty: () => void
   onError?: (e: Error) => void
 }
@@ -37,6 +37,12 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   let txExists = false, trExists = false, spExists = false, spayExists = false
   let allReadyFired = false
 
+  // fromCache追跡: キャッシュ(IndexedDB)か否か。全ドキュメントがサーバー確認済みになったらfalse
+  let mainFromCache = true, txFromCache = true, trFromCache = true, spFromCache = true, spayFromCache = true
+  function isFromCache() {
+    return mainFromCache && txFromCache && trFromCache && spFromCache && spayFromCache
+  }
+
   function buildFull(): FirestoreData {
     return { ...mainSnap!, transactions, transfers, staffPurchases, staffPayments }
   }
@@ -51,7 +57,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
     if (!trExists)   transfers      = legacyTr
     if (!spExists)   staffPurchases = legacySp
     if (!spayExists) staffPayments  = legacySpay
-    onData(buildFull())
+    onData(buildFull(), isFromCache())
   }
 
   // 5ドキュメントへの同時書き込みは各snapshotが個別に発火するため
@@ -62,7 +68,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
     if (laterUpdateTimer) clearTimeout(laterUpdateTimer)
     laterUpdateTimer = setTimeout(() => {
       laterUpdateTimer = null
-      onData(buildFull())
+      onData(buildFull(), isFromCache())
     }, 60)
   }
 
@@ -70,6 +76,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   const unsubMain = onSnapshot(MAIN_DOC, { includeMetadataChanges: true }, (snap) => {
     const isFirst = !mainReady
     mainReady = true
+    mainFromCache = snap.metadata.fromCache
     if (snap.exists()) {
       const d = snap.data() as Record<string, unknown>
       mainSnap = {
@@ -107,6 +114,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   const unsubTx = onSnapshot(TX_DOC, { includeMetadataChanges: true }, (snap) => {
     const isFirst = !txReady
     txReady = true; txExists = snap.exists()
+    txFromCache = snap.metadata.fromCache
     if (snap.exists()) transactions = (snap.data().items as FirestoreData['transactions']) ?? []
     if (isFirst) checkAllReady(); else onLaterUpdate()
   }, (e) => {
@@ -118,6 +126,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   const unsubTr = onSnapshot(TRANSFERS_DOC, { includeMetadataChanges: true }, (snap) => {
     const isFirst = !trReady
     trReady = true; trExists = snap.exists()
+    trFromCache = snap.metadata.fromCache
     if (snap.exists()) transfers = (snap.data().items as FirestoreData['transfers']) ?? []
     if (isFirst) checkAllReady(); else onLaterUpdate()
   }, (e) => {
@@ -129,6 +138,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   const unsubSp = onSnapshot(SP_DOC, { includeMetadataChanges: true }, (snap) => {
     const isFirst = !spReady
     spReady = true; spExists = snap.exists()
+    spFromCache = snap.metadata.fromCache
     if (snap.exists()) staffPurchases = (snap.data().items as FirestoreData['staffPurchases']) ?? []
     if (isFirst) checkAllReady(); else onLaterUpdate()
   }, (e) => {
@@ -140,6 +150,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   const unsubSpay = onSnapshot(SPAY_DOC, { includeMetadataChanges: true }, (snap) => {
     const isFirst = !spayReady
     spayReady = true; spayExists = snap.exists()
+    spayFromCache = snap.metadata.fromCache
     if (snap.exists()) staffPayments = (snap.data().items as FirestoreData['staffPayments']) ?? []
     if (isFirst) checkAllReady(); else onLaterUpdate()
   }, (e) => {
