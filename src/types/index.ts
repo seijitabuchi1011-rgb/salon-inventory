@@ -83,6 +83,7 @@ export interface Transfer {
   status: TransferStatus
   items: TransferItem[]
   memo?: string
+  permanent?: boolean  // true=譲渡（返却不要）、false/undefined=貸出し（返却あり）
 }
 
 export interface StocktakeItem {

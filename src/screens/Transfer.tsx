@@ -27,6 +27,7 @@ export function Transfer() {
   const [selectedId, setSelectedId] = useState('')
   const [qty, setQty] = useState(1)
   const [memo, setMemo] = useState('')
+  const [permanent, setPermanent] = useState(false)
   const [showDrop, setShowDrop] = useState(false)
   const [toast, setToast] = useState('')
 
@@ -85,7 +86,7 @@ export function Transfer() {
 
   async function handleTransfer() {
     if (!selectedId || qty <= 0) return
-    directTransfer(fromStore, toStore, selectedId, qty, memo || undefined)
+    directTransfer(fromStore, toStore, selectedId, qty, memo || undefined, permanent || undefined)
     const name = selectedProduct?.name ?? ''
     if (appSettings.notifyTransfer) {
       sendNotification(
@@ -98,6 +99,7 @@ export function Transfer() {
     clearProduct()
     setMemo('')
     setQty(1)
+    setPermanent(false)
     await flushToFirestoreNow()
   }
 
@@ -269,6 +271,22 @@ export function Transfer() {
               )}
             </div>
 
+            {/* 返却要否 */}
+            <button
+              type="button"
+              onClick={() => setPermanent((v) => !v)}
+              className={`w-full h-11 rounded-lg border-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${
+                permanent
+                  ? 'border-orange-400 bg-orange-50 text-orange-700'
+                  : 'border-border bg-bg text-muted'
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${permanent ? 'border-orange-400 bg-orange-400' : 'border-border'}`}>
+                {permanent && <span className="text-white text-xs font-black">✓</span>}
+              </span>
+              {permanent ? '譲渡（返却不要）' : '貸出し（返却あり）'}
+            </button>
+
             {/* メモ */}
             <div>
               <label className="text-xs font-semibond text-muted mb-1.5 block">メモ（任意）</label>
@@ -326,6 +344,11 @@ export function Transfer() {
                       <p className="text-sm font-medium text-text truncate">{p?.name ?? '不明商品'}</p>
                       {tr.memo && <p className="text-xs text-faint truncate">{tr.memo}</p>}
                     </div>
+                    {tr.permanent ? (
+                      <span className="text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded flex-shrink-0">譲渡</span>
+                    ) : (
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded flex-shrink-0">貸出し</span>
+                    )}
                     <span className="text-sm font-bold text-text flex-shrink-0">{item?.quantity ?? 0} 個</span>
                     {tr.status === '承認待ち' ? (
                       <div className="flex gap-1 flex-shrink-0">

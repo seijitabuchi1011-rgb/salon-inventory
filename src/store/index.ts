@@ -160,7 +160,7 @@ interface AppState {
   addTransfer: (t: Omit<Transfer, 'id' | 'createdAt' | 'status'>) => void
   approveTransfer: (id: string) => void
   rejectTransfer: (id: string) => void
-  directTransfer: (fromStore: StoreId, toStore: StoreId, productId: string, quantity: number, memo?: string) => void
+  directTransfer: (fromStore: StoreId, toStore: StoreId, productId: string, quantity: number, memo?: string, permanent?: boolean) => void
   deleteTransfer: (id: string) => void
   staffPurchases: StaffPurchase[]
   addStaffPurchase: (p: Omit<StaffPurchase, 'id' | 'timestamp'>) => void
@@ -1143,7 +1143,7 @@ export const useAppStore = create<AppState>()(
             t.id === id ? { ...t, status: '却下' as TransferStatus } : t
           ),
         })),
-      directTransfer: (fromStore, toStore, productId, quantity, memo) =>
+      directTransfer: (fromStore, toStore, productId, quantity, memo, permanent) =>
         set((state) => {
           const id = `TR-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
           const newTransfer: Transfer = {
@@ -1152,6 +1152,7 @@ export const useAppStore = create<AppState>()(
             status: '承認済',
             items: [{ productId, quantity }],
             ...(memo ? { memo } : {}),
+            ...(permanent ? { permanent: true } : {}),
           }
           let stocks = state.stocks.map((s) => {
             if (s.productId !== productId) return s
