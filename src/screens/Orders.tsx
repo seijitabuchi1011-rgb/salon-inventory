@@ -5,6 +5,7 @@ import { StoreDot } from '../components/StoreDot'
 import { Btn } from '../components/Btn'
 import { useAppStore } from '../store'
 import { sendNotification } from '../lib/email'
+import { forceSyncFromFirestore, flushToFirestoreNow } from '../hooks/useFirestoreSync'
 
 type Tab = 'receive' | 'dispense'
 
@@ -30,6 +31,9 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   const [modal, setModal] = useState<ModalState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 画面表示時にFirestoreから最新データを取得（PC↔iPad同期）
+  useEffect(() => { forceSyncFromFirestore() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // useSyncExternalStoreのiOS Safari問題を回避: vanillaのsubscribeで直接監視
   const [stocks, setStocks] = useState(() => useAppStore.getState().stocks)
@@ -66,7 +70,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
   }
 
   // ワンタッチで ±1
-  function quickUpdate(productId: string, storeId: string, delta: number) {
+  async function quickUpdate(productId: string, storeId: string, delta: number) {
     // getState()で最新在庫を取得（iOS SafariのuseStateステール回避）
     const s = useAppStore.getState().stocks.find((st) => st.productId === productId && st.storeId === storeId)
     const currentStock = s?.currentStock ?? 0
@@ -117,6 +121,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
         `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeInfo[storeId]?.name ?? storeId}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）`
       )
     }
+    await flushToFirestoreNow()
   }
 
   // モーダルで任意数を入力
@@ -134,7 +139,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     })
   }
 
-  function confirmTransaction() {
+  async function confirmTransaction() {
     if (!modal) return
     const newStock = isReceive
       ? modal.currentStock + modal.quantity
@@ -158,6 +163,7 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
       showToast(`仕入れ記録: ${modal.productName} +${modal.quantity} → 今月仕入高に追加`)
     }
     setModal(null)
+    await flushToFirestoreNow()
   }
 
   const afterStock = modal
