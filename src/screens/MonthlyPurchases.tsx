@@ -311,7 +311,7 @@ export function MonthlyPurchases() {
                 <tbody>
                   {filtered.map((t) => {
                     const p = products.find((pr) => pr.id === t.productId)
-                    const { incTax: unitIncTax } = effectivePrice(t)
+                    const { incTax: unitIncTax, rate } = effectivePrice(t)
                     const totalIncTax = unitIncTax * t.quantity
                     const isCustomPrice = t.customPurchasePrice !== undefined && t.customPurchasePrice !== p?.purchasePrice
                     const dateStr = new Date(t.timestamp).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
