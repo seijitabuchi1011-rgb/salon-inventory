@@ -1020,6 +1020,13 @@ export function Settings() {
 
             </div>
           </div>
+
+          {/* ビルドバージョン表示 */}
+          <div className="px-6 py-3 border-t border-border bg-bg text-center">
+            <p className="text-xs text-faint">
+              バージョン: {__BUILD_TIME__}
+            </p>
+          </div>
         </main>
       </div>
 
