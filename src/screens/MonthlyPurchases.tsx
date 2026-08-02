@@ -31,6 +31,7 @@ type AddForm = {
   productId: string
   productSearch: string
   quantity: number
+  customPrice: string  // 空文字=登録価格を使用、数字=今回のみ上書き（税抜）
 }
 
 const BLANK_ADD = (): AddForm => ({
@@ -39,6 +40,7 @@ const BLANK_ADD = (): AddForm => ({
   productId: '',
   productSearch: '',
   quantity: 1,
+  customPrice: '',
 })
 
 export function MonthlyPurchases() {
@@ -70,33 +72,38 @@ export function MonthlyPurchases() {
     return true
   }).sort((a, b) => b.timestamp - a.timestamp)
 
+  // トランザクションの実効単価を返す（customPurchasePrice優先）
+  function effectivePrice(t: typeof filtered[number]) {
+    const p = products.find((pr) => pr.id === t.productId)
+    const rate = p?.taxRate ?? 10
+    const exTax = t.customPurchasePrice ?? p?.purchasePrice ?? 0
+    return { exTax, incTax: taxIncluded(exTax, rate), rate }
+  }
+
   // 商品別集計
-  type AggRow = { productId: string; name: string; category: string; taxRate: 8 | 10; unitIncTax: number; totalQty: number; totalIncTax: number }
+  type AggRow = { productId: string; name: string; category: string; taxRate: 8 | 10; totalQty: number; totalIncTax: number; hasCustom: boolean }
   const aggregated: AggRow[] = Object.values(
     filtered.reduce<Record<string, AggRow>>((acc, t) => {
       const p = products.find((pr) => pr.id === t.productId)
       const key = t.productId
-      const rate = p?.taxRate ?? 10
-      const unitIncTax = taxIncluded(p?.purchasePrice ?? 0, rate)
+      const { incTax, rate } = effectivePrice(t)
+      const isCustom = t.customPurchasePrice !== undefined && t.customPurchasePrice !== p?.purchasePrice
       if (!acc[key]) {
-        acc[key] = { productId: key, name: p?.name ?? '不明商品', category: p?.category ?? '', taxRate: rate, unitIncTax, totalQty: 0, totalIncTax: 0 }
+        acc[key] = { productId: key, name: p?.name ?? '不明商品', category: p?.category ?? '', taxRate: rate, totalQty: 0, totalIncTax: 0, hasCustom: false }
       }
       acc[key].totalQty += t.quantity
-      acc[key].totalIncTax += unitIncTax * t.quantity
+      acc[key].totalIncTax += incTax * t.quantity
+      if (isCustom) acc[key].hasCustom = true
       return acc
     }, {})
   ).sort((a, b) => b.totalIncTax - a.totalIncTax)
 
-  // KPIs (aggregated from all receives in range regardless of store filter for context, but respect filter)
   const totalQty = filtered.reduce((sum, t) => sum + t.quantity, 0)
   const totalAmountExTax = filtered.reduce((sum, t) => {
-    const p = products.find((pr) => pr.id === t.productId)
-    return sum + (p?.purchasePrice ?? 0) * t.quantity
+    return sum + effectivePrice(t).exTax * t.quantity
   }, 0)
   const totalAmountIncTax = filtered.reduce((sum, t) => {
-    const p = products.find((pr) => pr.id === t.productId)
-    if (!p) return sum
-    return sum + taxIncluded(p.purchasePrice, p.taxRate ?? 10) * t.quantity
+    return sum + effectivePrice(t).incTax * t.quantity
   }, 0)
   const distinctProducts = new Set(filtered.map((t) => t.productId)).size
 
@@ -114,12 +121,16 @@ export function MonthlyPurchases() {
 
   function handleAdd() {
     if (!form.productId) return
+    const parsedCustom = form.customPrice !== '' ? parseInt(form.customPrice.replace(/,/g, ''), 10) : NaN
+    const defaultPrice = selectedProduct?.purchasePrice
+    const useCustom = !isNaN(parsedCustom) && parsedCustom !== defaultPrice
     addTransaction({
       type: 'receive',
       productId: form.productId,
       storeId: form.storeId,
       quantity: form.quantity,
       timestamp: new Date(form.date).getTime(),
+      ...(useCustom ? { customPurchasePrice: parsedCustom } : {}),
     })
     setShowAddModal(false)
   }
@@ -257,6 +268,7 @@ export function MonthlyPurchases() {
                     <tr key={row.productId} className="border-b border-border hover:bg-bg transition-colors">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-text">{row.name}</p>
+                        {row.hasCustom && <p className="text-xs text-orange-500 font-semibold">緊急仕入あり</p>}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted">{row.category}</td>
                       <td className="px-3 py-3 text-center">
@@ -265,7 +277,9 @@ export function MonthlyPurchases() {
                         }`}>{row.taxRate}%</span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-bold">{row.totalQty}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted">¥{row.unitIncTax.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted">
+                        {row.hasCustom ? <span className="text-xs text-orange-500">複数価格</span> : `¥${Math.round(row.totalIncTax / row.totalQty).toLocaleString()}`}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums font-bold text-accent">¥{row.totalIncTax.toLocaleString()}</td>
                     </tr>
                   ))}
@@ -297,9 +311,9 @@ export function MonthlyPurchases() {
                 <tbody>
                   {filtered.map((t) => {
                     const p = products.find((pr) => pr.id === t.productId)
-                    const rate = p?.taxRate ?? 10
-                    const unitIncTax = taxIncluded(p?.purchasePrice ?? 0, rate)
+                    const { incTax: unitIncTax } = effectivePrice(t)
                     const totalIncTax = unitIncTax * t.quantity
+                    const isCustomPrice = t.customPurchasePrice !== undefined && t.customPurchasePrice !== p?.purchasePrice
                     const dateStr = new Date(t.timestamp).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
                     return (
                       <tr key={t.id} className="border-b border-border hover:bg-bg transition-colors">
@@ -320,7 +334,12 @@ export function MonthlyPurchases() {
                           }`}>{rate}%</span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums font-bold">{t.quantity}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-muted">¥{unitIncTax.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted">
+                          ¥{unitIncTax.toLocaleString()}
+                          {isCustomPrice && (
+                            <span className="ml-1 text-xs font-bold text-orange-500 bg-orange-50 border border-orange-200 px-1 rounded">緊急</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right tabular-nums font-bold">¥{totalIncTax.toLocaleString()}</td>
                         <td className="px-2 py-3 text-center">
                           <button
@@ -441,7 +460,7 @@ export function MonthlyPurchases() {
                       {dropProducts.map((p) => (
                         <button
                           key={p.id}
-                          onMouseDown={() => setForm((f) => ({ ...f, productId: p.id, productSearch: p.name }))}
+                          onMouseDown={() => setForm((f) => ({ ...f, productId: p.id, productSearch: p.name, customPrice: String(p.purchasePrice) }))}
                           className="w-full text-left px-3 py-2.5 text-sm hover:bg-bg flex items-center justify-between border-b border-border last:border-0"
                         >
                           <span className="font-medium truncate">{p.name}</span>
@@ -477,6 +496,45 @@ export function MonthlyPurchases() {
                 </button>
               </div>
             </div>
+
+            {/* 仕入単価（緊急仕入など価格が異なる場合に変更） */}
+            {selectedProduct && (
+              <div>
+                <label className="text-xs font-semibold text-muted mb-1.5 block">
+                  仕入単価（税抜）
+                  {form.customPrice !== '' && parseInt(form.customPrice) !== selectedProduct.purchasePrice && (
+                    <span className="ml-2 text-orange-500 font-bold">※ 登録価格と異なります</span>
+                  )}
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted">¥</span>
+                  <input
+                    type="number"
+                    value={form.customPrice}
+                    onChange={(e) => setForm((f) => ({ ...f, customPrice: e.target.value }))}
+                    className="flex-1 h-10 border border-border-strong rounded-md px-3 text-sm bg-surface text-text outline-none focus:border-orange-400"
+                    placeholder={String(selectedProduct.purchasePrice)}
+                  />
+                  {form.customPrice !== '' && parseInt(form.customPrice) !== selectedProduct.purchasePrice && (
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, customPrice: String(selectedProduct.purchasePrice) }))}
+                      className="text-xs text-muted hover:text-text px-2 py-1 border border-border rounded"
+                    >
+                      元に戻す
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-faint mt-1">
+                  登録価格: ¥{selectedProduct.purchasePrice.toLocaleString()}（税込 ¥{taxIncluded(selectedProduct.purchasePrice, selectedProduct.taxRate ?? 10).toLocaleString()}）
+                  {form.customPrice !== '' && !isNaN(parseInt(form.customPrice)) && (
+                    <span className="ml-2 text-text font-semibold">
+                      → 今回: ¥{parseInt(form.customPrice).toLocaleString()}（税込 ¥{taxIncluded(parseInt(form.customPrice), selectedProduct.taxRate ?? 10).toLocaleString()}）
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-2 justify-end">
               <Btn variant="ghost" onClick={() => setShowAddModal(false)}>キャンセル</Btn>

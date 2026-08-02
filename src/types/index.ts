@@ -68,6 +68,7 @@ export interface Transaction {
   relatedStoreId?: StoreId
   timestamp: number
   dispensedBy?: string  // 卸した人（払出し時に記録）
+  customPurchasePrice?: number  // 緊急仕入など通常と異なる仕入単価（税抜）
 }
 
 export interface TransferItem {
