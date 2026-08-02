@@ -19,7 +19,7 @@ const safeLocalStorage = {
 // 削除済みトランザクションIDのtombstone（小さなキー、全stateより書き込み成功率が高い）
 // Firestoreから古いデータが読み込まれても、これでフィルタリングする
 const DELETED_TX_KEY = 'salon-deleted-tx-ids'
-function readDeletedTxIds(): Set<string> {
+export function readDeletedTxIds(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(DELETED_TX_KEY) ?? '[]')) } catch { return new Set() }
 }
 function appendDeletedTxId(id: string) {
@@ -128,6 +128,7 @@ export interface FirestoreData {
   dealerReps: string[]
   lastModified?: number
   lastModifiedBy?: string
+  deletedTxIds?: string[]  // 削除済みトランザクションID（他端末に伝播するためFirestoreに含める）
 }
 
 interface AppState {
@@ -1317,7 +1318,13 @@ export const useAppStore = create<AppState>()(
       // - 商品・設定: Firestore側を採用（主にPCが管理するため）
       mergeFromFirestore: (data) =>
         set((state) => {
-          const deletedIds = readDeletedTxIds()
+          const localDeletedIds = readDeletedTxIds()
+          // 他端末がFirestoreに書き込んだtombstoneも適用（削除が全端末に伝播する）
+          const remoteDeletedIds = new Set(data.deletedTxIds ?? [])
+          for (const id of remoteDeletedIds) {
+            if (!localDeletedIds.has(id)) appendDeletedTxId(id)
+          }
+          const deletedIds = new Set([...localDeletedIds, ...remoteDeletedIds])
 
           // 在庫マージ: タイムスタンプで新しい方を優先
           const stockMap = new Map<string, StoreStock>()
@@ -1332,7 +1339,7 @@ export const useAppStore = create<AppState>()(
             }
           }
 
-          // トランザクション: IDで重複排除して統合（tombstone適用）
+          // トランザクション: IDで重複排除して統合（ローカル＋リモートtombstone適用）
           const txMap = new Map<string, Transaction>()
           for (const t of [...(data.transactions ?? []), ...state.transactions]) {
             if (!txMap.has(t.id)) txMap.set(t.id, t)

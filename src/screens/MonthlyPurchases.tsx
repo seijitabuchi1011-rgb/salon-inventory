@@ -5,6 +5,7 @@ import { Card } from '../components/Card'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
+import { forceSyncFromFirestore, flushToFirestoreNow } from '../hooks/useFirestoreSync'
 import type { StoreId } from '../types'
 
 type StoreF = 'all' | StoreId
@@ -45,6 +46,9 @@ const BLANK_ADD = (): AddForm => ({
 
 export function MonthlyPurchases() {
   const { products, storeOrder, storeInfo, addTransaction, deleteTransaction } = useAppStore()
+
+  // 画面表示時にFirestoreから最新データを取得（PC↔iPad同期）
+  useEffect(() => { forceSyncFromFirestore() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // useSyncExternalStoreのiOS Safari問題を回避: vanillaのsubscribeで直接監視
   const [transactions, setTransactions] = useState(() => useAppStore.getState().transactions)
@@ -119,7 +123,7 @@ export function MonthlyPurchases() {
     setShowAddModal(true)
   }
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!form.productId) return
     const parsedCustom = form.customPrice !== '' ? parseInt(form.customPrice.replace(/,/g, ''), 10) : NaN
     const defaultPrice = selectedProduct?.purchasePrice
@@ -133,6 +137,7 @@ export function MonthlyPurchases() {
       ...(useCustom ? { customPurchasePrice: parsedCustom } : {}),
     })
     setShowAddModal(false)
+    await flushToFirestoreNow()
   }
 
   return (
@@ -376,7 +381,7 @@ export function MonthlyPurchases() {
             <p className="text-xs text-muted">削除すると元に戻せません。在庫数には反映されません。</p>
             <div className="flex gap-2">
               <Btn variant="ghost" className="flex-1" onClick={() => setConfirmDeleteId(null)}>キャンセル</Btn>
-              <Btn variant="danger" className="flex-1" onClick={() => { const id = confirmDeleteId; setConfirmDeleteId(null); if (id) deleteTransaction(id) }}>
+              <Btn variant="danger" className="flex-1" onClick={() => { const id = confirmDeleteId; setConfirmDeleteId(null); if (id) { deleteTransaction(id); flushToFirestoreNow() } }}>
                 削除
               </Btn>
             </div>

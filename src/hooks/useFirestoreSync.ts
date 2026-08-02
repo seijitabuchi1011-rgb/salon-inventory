@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { subscribeToProductImages, writeToFirestore, subscribeToFirestore, readFromFirestore } from '../lib/firestore'
-import { useAppStore } from '../store'
+import { useAppStore, readDeletedTxIds } from '../store'
 
 const DEVICE_ID_KEY = 'salon-inventory-device-id'
 
@@ -17,7 +17,7 @@ async function pushToFirestore(
   state: ReturnType<typeof useAppStore.getState>,
   deviceId: string,
 ) {
-  await writeToFirestore(state, deviceId)
+  await writeToFirestore({ ...state, deletedTxIds: [...readDeletedTxIds()] }, deviceId)
 }
 
 // 保存ボタンなど「即時書き込みが必要なタイミング」からコールできるモジュールレベル関数
