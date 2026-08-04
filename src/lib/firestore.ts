@@ -26,6 +26,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   let staffPurchases: FirestoreData['staffPurchases'] = []
   let staffPayments: FirestoreData['staffPayments'] = []
   let deletedTxIds: string[] = []
+  let deletedTrIds: string[] = []
 
   // 旧フォーマット（main doc に全配列が埋め込まれていた）の移行用フォールバック
   let legacyTx: FirestoreData['transactions'] = []
@@ -45,7 +46,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   }
 
   function buildFull(): FirestoreData {
-    return { ...mainSnap!, transactions, transfers, staffPurchases, staffPayments, deletedTxIds }
+    return { ...mainSnap!, transactions, transfers, staffPurchases, staffPayments, deletedTxIds, deletedTrIds }
   }
 
   // 全ドキュメントの初回ロードが揃ったら一度だけ呼ぶ
@@ -131,7 +132,10 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
     const isFirst = !trReady
     trReady = true; trExists = snap.exists()
     trFromCache = snap.metadata.fromCache
-    if (snap.exists()) transfers = (snap.data().items as FirestoreData['transfers']) ?? []
+    if (snap.exists()) {
+      transfers = (snap.data().items as FirestoreData['transfers']) ?? []
+      deletedTrIds = (snap.data().deletedIds as string[]) ?? []
+    }
     if (isFirst) checkAllReady(); else onLaterUpdate()
   }, (e) => {
     console.error('[Firestore tr]', e)
@@ -195,6 +199,7 @@ export async function readFromFirestore(): Promise<FirestoreData | null> {
       ? ((txSnap.data().items   as FirestoreData['transactions'])   ?? [])
       : ((d.transactions        as FirestoreData['transactions'])   ?? []),
     deletedTxIds: txSnap.exists() ? ((txSnap.data().deletedIds as string[]) ?? []) : [],
+    deletedTrIds: trSnap.exists() ? ((trSnap.data().deletedIds as string[]) ?? []) : [],
     transfers: trSnap.exists()
       ? ((trSnap.data().items   as FirestoreData['transfers'])      ?? [])
       : ((d.transfers           as FirestoreData['transfers'])      ?? []),
@@ -228,7 +233,7 @@ export async function writeToFirestore(data: FirestoreData, deviceId?: string): 
       lastModifiedBy:     deviceId ?? null,
     }),
     setDoc(TX_DOC,        { items: data.transactions, deletedIds: data.deletedTxIds ?? [], lastModified: now }),
-    setDoc(TRANSFERS_DOC, { items: data.transfers,       lastModified: now }),
+    setDoc(TRANSFERS_DOC, { items: data.transfers, deletedIds: data.deletedTrIds ?? [], lastModified: now }),
     setDoc(SP_DOC,        { items: data.staffPurchases,  lastModified: now }),
     setDoc(SPAY_DOC,      { items: data.staffPayments,   lastModified: now }),
   ])

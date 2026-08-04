@@ -258,6 +258,7 @@ export function Settings() {
   const [notifyOrder, setNotifyOrder] = useState(appSettings.notifyOrder)
   const [notifyTransfer, setNotifyTransfer] = useState(appSettings.notifyTransfer)
   const [notifyStocktake, setNotifyStocktake] = useState(appSettings.notifyStocktake)
+  const [lowStockAlertMinCount, setLowStockAlertMinCount] = useState(appSettings.lowStockAlertMinCount ?? 1)
 
   // CSVインポート
   const importRef = useRef<HTMLInputElement>(null)
@@ -286,6 +287,7 @@ export function Settings() {
       notifyOrder,
       notifyTransfer,
       notifyStocktake,
+      lowStockAlertMinCount: Math.max(1, lowStockAlertMinCount),
     })
     showToast('通知設定を保存しました')
   }
@@ -775,6 +777,24 @@ export function Settings() {
                             />
                           </div>
                         ))}
+                      </div>
+                      <div className="mt-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-text">アラート閾値</p>
+                          <p className="text-xs text-faint">下限を下回った商品が何個以上でアラートを送るか</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setLowStockAlertMinCount((n) => Math.max(1, n - 1))}
+                            className="w-8 h-8 rounded-md border border-border text-muted hover:bg-bg flex items-center justify-center text-lg"
+                          >−</button>
+                          <span className="text-sm font-bold w-8 text-center">{lowStockAlertMinCount}</span>
+                          <button
+                            onClick={() => setLowStockAlertMinCount((n) => Math.min(20, n + 1))}
+                            className="w-8 h-8 rounded-md border border-border text-muted hover:bg-bg flex items-center justify-center text-lg"
+                          >+</button>
+                          <span className="text-xs text-muted ml-1">個以上</span>
+                        </div>
                       </div>
                     </div>
                     <Row label="入荷・発注通知" sub="発注ステータスが変更されたとき">

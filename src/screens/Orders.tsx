@@ -115,11 +115,19 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     }
     const notifyThisStore = appSettings.notifyLowStockByStore?.[storeId] ?? appSettings.notifyLowStock
     if (delta < 0 && notifyThisStore && next <= (s?.minStock ?? 3)) {
-      const p = products.find((pr) => pr.id === productId)
-      sendNotification(
-        '在庫不足アラート',
-        `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeInfo[storeId]?.name ?? storeId}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）`
-      )
+      const threshold = appSettings.lowStockAlertMinCount ?? 1
+      const allStocks = useAppStore.getState().stocks
+      const belowMinCount = allStocks.filter((st) =>
+        st.storeId === storeId && st.currentStock <= (st.minStock ?? 3)
+      ).length
+      if (belowMinCount >= threshold) {
+        const p = products.find((pr) => pr.id === productId)
+        const storeName = storeInfo[storeId]?.name ?? storeId
+        sendNotification(
+          `在庫不足アラート${threshold > 1 ? ` (${belowMinCount}商品)` : ''}`,
+          `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeName}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）${belowMinCount > 1 ? `\n\nこの店舗で現在 ${belowMinCount} 商品が下限を下回っています。` : ''}`
+        )
+      }
     }
     await flushToFirestoreNow()
   }

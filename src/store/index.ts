@@ -40,7 +40,7 @@ function pruneDeletedTxIds(firestoreTxIds: Set<string>) {
 
 // 移動履歴削除のtombstone（取消後にonSnapshotキャッシュで復活するのを防ぐ）
 const DELETED_TR_KEY = 'salon-deleted-tr-ids'
-function readDeletedTrIds(): Set<string> {
+export function readDeletedTrIds(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(DELETED_TR_KEY) ?? '[]')) } catch { return new Set() }
 }
 function appendDeletedTrId(id: string) {
@@ -74,6 +74,7 @@ export interface AppSettings {
   notifyTransfer: boolean
   notifyStocktake: boolean
   pin: string
+  lowStockAlertMinCount?: number  // 何個以上の商品が下限を下回ったらアラートを送るか（デフォルト: 1）
 }
 
 const DEFAULT_STORE_INFO: Record<string, StoreInfo> = {
@@ -129,6 +130,7 @@ export interface FirestoreData {
   lastModified?: number
   lastModifiedBy?: string
   deletedTxIds?: string[]  // 削除済みトランザクションID（他端末に伝播するためFirestoreに含める）
+  deletedTrIds?: string[]  // 削除済み移動履歴ID（他端末に伝播するためFirestoreに含める）
 }
 
 interface AppState {
@@ -1289,6 +1291,7 @@ export const useAppStore = create<AppState>()(
             notifyTransfer: (raw.notifyTransfer as boolean | undefined) ?? state.appSettings.notifyTransfer,
             notifyStocktake: (raw.notifyStocktake as boolean | undefined) ?? state.appSettings.notifyStocktake,
             pin: (raw.pin as string | undefined) ?? state.appSettings.pin,
+            lowStockAlertMinCount: (raw.lowStockAlertMinCount as number | undefined) ?? state.appSettings.lowStockAlertMinCount ?? 1,
           }
           return {
             products: data.products.map((fp) => ({
@@ -1360,12 +1363,15 @@ export const useAppStore = create<AppState>()(
             if (!spayMap.has(p.id)) spayMap.set(p.id, p)
           }
 
-          // 移動履歴: Firestoreを完全な権威的ソースとして扱う
-          // UI操作後はflushToFirestoreNow()で即時書き込みするため、
-          // ローカルのみのデータを保持する必要がない（保持するとPC→iPad削除で復活するバグの原因になる）
+          // 移動履歴: Firestoreを権威的ソースとして使用 + 他端末のtombstoneも適用
           const firestoreTrIds = new Set((data.transfers ?? []).map((t) => t.id))
           pruneDeletedTrIds(firestoreTrIds)
-          const deletedTrIds = readDeletedTrIds()
+          const localDeletedTrIds = readDeletedTrIds()
+          const remoteDeletedTrIds = new Set(data.deletedTrIds ?? [])
+          for (const id of remoteDeletedTrIds) {
+            if (!localDeletedTrIds.has(id)) appendDeletedTrId(id)
+          }
+          const deletedTrIds = new Set([...localDeletedTrIds, ...remoteDeletedTrIds])
 
           // 棚卸スナップショット: IDで重複排除統合（完了記録を両端末で保持）
           const snapMap = new Map<string, StocktakeSnapshot>()
