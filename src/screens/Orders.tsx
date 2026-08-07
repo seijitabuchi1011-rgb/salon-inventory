@@ -4,7 +4,7 @@ import { SideNav } from '../components/SideNav'
 import { StoreDot } from '../components/StoreDot'
 import { Btn } from '../components/Btn'
 import { useAppStore } from '../store'
-import { sendNotification } from '../lib/email'
+import { queueLowStockAlert } from '../lib/email'
 import { forceSyncFromFirestore, flushToFirestoreNow } from '../hooks/useFirestoreSync'
 
 type Tab = 'receive' | 'dispense'
@@ -115,19 +115,12 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     }
     const notifyThisStore = appSettings.notifyLowStockByStore?.[storeId] ?? appSettings.notifyLowStock
     if (delta < 0 && notifyThisStore && next <= (s?.minStock ?? 3)) {
-      const threshold = appSettings.lowStockAlertMinCount ?? 1
-      const allStocks = useAppStore.getState().stocks
-      const belowMinCount = allStocks.filter((st) =>
-        st.storeId === storeId && st.currentStock <= (st.minStock ?? 3)
-      ).length
-      if (belowMinCount >= threshold) {
-        const p = products.find((pr) => pr.id === productId)
-        const storeName = storeInfo[storeId]?.name ?? storeId
-        sendNotification(
-          `在庫不足アラート${threshold > 1 ? ` (${belowMinCount}商品)` : ''}`,
-          `${p?.name ?? '商品'} の在庫が下限を下回りました。\n店舗: ${storeName}\n現在庫: ${next} 個（下限: ${s?.minStock ?? 3} 個）${belowMinCount > 1 ? `\n\nこの店舗で現在 ${belowMinCount} 商品が下限を下回っています。` : ''}`
-        )
-      }
+      const p = products.find((pr) => pr.id === productId)
+      const storeName = storeInfo[storeId]?.name ?? storeId
+      queueLowStockAlert(
+        { productName: p?.name ?? '商品', storeName, currentStock: next, minStock: s?.minStock ?? 3 },
+        appSettings.lowStockAlertMinCount ?? 1
+      )
     }
     await flushToFirestoreNow()
   }
@@ -162,9 +155,10 @@ export function Orders({ fixedMode }: { fixedMode?: Tab }) {
     })
     const notifyThisStore = appSettings.notifyLowStockByStore?.[modal.storeId] ?? appSettings.notifyLowStock
     if (!isReceive && notifyThisStore && newStock <= modal.minStock) {
-      sendNotification(
-        '在庫不足アラート',
-        `${modal.productName} の在庫が下限を下回りました。\n店舗: ${storeInfo[modal.storeId]?.name ?? modal.storeId}\n現在庫: ${newStock} 個（下限: ${modal.minStock} 個）`
+      const storeName = storeInfo[modal.storeId]?.name ?? modal.storeId
+      queueLowStockAlert(
+        { productName: modal.productName, storeName, currentStock: newStock, minStock: modal.minStock },
+        appSettings.lowStockAlertMinCount ?? 1
       )
     }
     if (isReceive) {

@@ -15,6 +15,7 @@ import { Settings } from './screens/Settings'
 import { useFirestoreSync } from './hooks/useFirestoreSync'
 import { BottomNav } from './components/BottomNav'
 import { PinGate } from './components/PinGate'
+import { SyncStatusBadge } from './components/SyncStatusBadge'
 
 function AppRoutes() {
   useFirestoreSync()
@@ -48,6 +49,7 @@ export default function App() {
             <AppRoutes />
           </div>
           <BottomNav />
+          <SyncStatusBadge />
         </div>
       </PinGate>
     </HashRouter>

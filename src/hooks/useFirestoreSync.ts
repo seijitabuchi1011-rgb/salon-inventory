@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { subscribeToProductImages, writeToFirestore, subscribeToFirestore, readFromFirestore } from '../lib/firestore'
 import { useAppStore, readDeletedTxIds, readDeletedTrIds } from '../store'
+import { useSyncStatus } from '../lib/syncStatus'
 
 const DEVICE_ID_KEY = 'salon-inventory-device-id'
 
@@ -13,11 +14,25 @@ function getOrCreateDeviceId(): string {
   return id
 }
 
+let _savedTimer: ReturnType<typeof setTimeout> | null = null
+
 async function pushToFirestore(
   state: ReturnType<typeof useAppStore.getState>,
   deviceId: string,
 ) {
-  await writeToFirestore({ ...state, deletedTxIds: [...readDeletedTxIds()], deletedTrIds: [...readDeletedTrIds()] }, deviceId)
+  const setStatus = useSyncStatus.getState().setStatus
+  if (_savedTimer) { clearTimeout(_savedTimer); _savedTimer = null }
+  setStatus('saving')
+  console.log('[SyncStatus] saving...')
+  try {
+    await writeToFirestore({ ...state, deletedTxIds: [...readDeletedTxIds()], deletedTrIds: [...readDeletedTrIds()] }, deviceId)
+    setStatus('saved')
+    console.log('[SyncStatus] saved ✓')
+    _savedTimer = setTimeout(() => { setStatus('idle'); _savedTimer = null }, 3000)
+  } catch (e) {
+    setStatus('error')
+    throw e
+  }
 }
 
 // 保存ボタンなど「即時書き込みが必要なタイミング」からコールできるモジュールレベル関数
