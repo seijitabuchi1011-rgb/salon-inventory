@@ -1410,14 +1410,54 @@ export const useAppStore = create<AppState>()(
               }
               return [...productMap.values()]
             })(),
-            staffMembers: data.staffMembers ?? state.staffMembers,
+            staffMembers: (() => {
+              const remote = data.staffMembers
+              if (!remote) return state.staffMembers
+              const merged = [...remote]
+              for (const s of state.staffMembers) {
+                if (!merged.includes(s)) merged.push(s)
+              }
+              return merged
+            })(),
             storeInfo: data.storeInfo ?? state.storeInfo,
             storeOrder: data.storeOrder ?? state.storeOrder,
             appSettings: data.appSettings ?? state.appSettings,
-            categories: data.categories ?? state.categories,
-            makers: data.makers ?? state.makers,
-            dealers: data.dealers ?? state.dealers,
-            dealerReps: data.dealerReps ?? state.dealerReps,
+            categories: (() => {
+              const remote = data.categories
+              if (!remote) return state.categories
+              const merged = [...remote]
+              for (const c of state.categories) {
+                if (!merged.includes(c)) merged.push(c)
+              }
+              return merged
+            })(),
+            makers: (() => {
+              const remote = data.makers
+              if (!remote) return state.makers
+              const merged = [...remote]
+              for (const m of state.makers) {
+                if (!merged.includes(m)) merged.push(m)
+              }
+              return merged
+            })(),
+            dealers: (() => {
+              const remote = data.dealers
+              if (!remote) return state.dealers
+              const merged = [...remote]
+              for (const d of state.dealers) {
+                if (!merged.includes(d)) merged.push(d)
+              }
+              return merged
+            })(),
+            dealerReps: (() => {
+              const remote = data.dealerReps
+              if (!remote) return state.dealerReps
+              const merged = [...remote]
+              for (const r of state.dealerReps) {
+                if (!merged.includes(r)) merged.push(r)
+              }
+              return merged
+            })(),
           }
         }),
     }),
