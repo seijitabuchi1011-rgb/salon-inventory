@@ -1386,8 +1386,23 @@ export const useAppStore = create<AppState>()(
             staffPayments: [...spayMap.values()],
             transfers: (data.transfers ?? []).filter((t) => !deletedTrIds.has(t.id)),
             stocktakeSnapshots: [...snapMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
-            // 棚卸ドラフト: Firestoreに値があれば採用（他端末の入力を反映）
-            stocktakeDraft: data.stocktakeDraft !== undefined ? data.stocktakeDraft : state.stocktakeDraft,
+            // 棚卸ドラフト: 同月のドラフトはローカルとリモートをマージ（どちらの入力も保持）
+            // nullで上書きしない（デバウンス中に古いFirestoreデータが届いてもローカル入力を失わない）
+            stocktakeDraft: (() => {
+              const remote = data.stocktakeDraft
+              const local = state.stocktakeDraft
+              if (remote === undefined) return local
+              if (remote === null) return local
+              if (!local) return remote
+              if (local.month !== remote.month) return remote
+              // 同月: 両方のカウントをマージ（ローカル優先）
+              const stores = [...new Set([...Object.keys(remote.counts), ...Object.keys(local.counts)])]
+              const mergedCounts: Record<string, Record<string, number>> = {}
+              for (const sid of stores) {
+                mergedCounts[sid] = { ...(remote.counts[sid] ?? {}), ...(local.counts[sid] ?? {}) }
+              }
+              return { month: local.month, counts: mergedCounts }
+            })(),
             // 商品: タイムスタンプで新しい方を優先（在庫と同じ戦略）。
             // ローカルで編集直後はlastModifiedが新しいためFirestoreの古いデータで上書きされない。
             // Firestoreに存在しないローカル追加商品は保持する。
