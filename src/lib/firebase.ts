@@ -17,4 +17,5 @@ export const app = initializeApp(firebaseConfig)
 // ページ更新後も正しいデータが読み込まれる
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache(),
+  ignoreUndefinedProperties: true,
 })
