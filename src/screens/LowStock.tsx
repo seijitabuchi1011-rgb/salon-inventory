@@ -11,6 +11,7 @@ export function LowStock() {
   const { currentStore, products, stocks } = useAppStore()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<Filter>('すべて')
+  const [categoryFilter, setCategoryFilter] = useState<string>('すべて')
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -61,12 +62,20 @@ export function LowStock() {
     return true
   })
 
+  const categories = ['すべて', ...Array.from(new Set(filtered.map((p) => p.category).filter(Boolean))).sort()]
+  const displayed = categoryFilter === 'すべて' ? filtered : filtered.filter((p) => p.category === categoryFilter)
+
+  const handleFilterChange = (f: Filter) => {
+    setFilter(f)
+    setCategoryFilter('すべて')
+  }
+
   const urgentCount = lowItems.filter((p) => p.urgent).length
   const storeLabel = currentStore === 'flag' ? 'flag美容室' : currentStore === 'lien' ? 'Lien美容室' : '全店'
 
   function exportCsv() {
     const header = ['商品名', 'カテゴリ', 'flag在庫', 'Lien在庫', 'flag下限', 'Lien下限']
-    const rows = filtered.map((p) => [p.name, p.category, p.flag, p.lien, p.flagMin, p.lienMin])
+    const rows = displayed.map((p) => [p.name, p.category, p.flag, p.lien, p.flagMin, p.lienMin])
     const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
@@ -106,7 +115,7 @@ export function LowStock() {
               {(['すべて', '緊急のみ', 'flag店', 'Lien店', '両店とも不足'] as Filter[]).map((f) => (
                 <button
                   key={f}
-                  onClick={() => setFilter(f)}
+                  onClick={() => handleFilterChange(f)}
                   className={`flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold transition-colors ${
                     filter === f ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'
                   }`}
@@ -115,10 +124,25 @@ export function LowStock() {
                 </button>
               ))}
             </div>
+            {categories.length > 2 && (
+              <div className="flex gap-2 overflow-x-auto mt-2">
+                {categories.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCategoryFilter(c)}
+                    className={`flex-shrink-0 px-3 h-6 rounded-full text-2xs font-semibold transition-colors ${
+                      categoryFilter === c ? 'bg-text text-surface' : 'bg-bg text-faint border border-border'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-auto">
-            {filtered.length === 0 ? (
+            {displayed.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted gap-3">
                 <span className="text-5xl">✓</span>
                 <p className="text-base font-semibold">在庫不足の商品はありません</p>
@@ -128,7 +152,7 @@ export function LowStock() {
               <>
                 {/* モバイル: カードリスト（カード全体タップで選択） */}
                 <div className="md:hidden divide-y divide-border">
-                  {filtered.map((p) => {
+                  {displayed.map((p) => {
                     const checked = selected.has(p.id)
                     return (
                       <button
@@ -182,7 +206,7 @@ export function LowStock() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((p) => {
+                    {displayed.map((p) => {
                       const checked = selected.has(p.id)
                       return (
                         <tr
