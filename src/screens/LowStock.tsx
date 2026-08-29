@@ -176,16 +176,18 @@ export function LowStock() {
                           </div>
                           <p className="text-xs text-muted mb-2">{p.category}</p>
                           <div className="flex gap-2 flex-wrap">
-                            {p.storeStocks.map(({ sid, current, min, low }) => (
-                              <StoreChip
-                                key={sid}
-                                label={shortName(sid)}
-                                color={storeInfo[sid]?.color ?? '#888'}
-                                current={current}
-                                min={min}
-                                low={low}
-                              />
-                            ))}
+                            {p.storeStocks
+                              .filter(({ sid }) => !storeIds.includes(filter) || sid === filter)
+                              .map(({ sid, current, min, low }) => (
+                                <StoreChip
+                                  key={sid}
+                                  label={shortName(sid)}
+                                  color={storeInfo[sid]?.color ?? '#888'}
+                                  current={current}
+                                  min={min}
+                                  low={low}
+                                />
+                              ))}
                           </div>
                         </div>
                       </button>
@@ -231,16 +233,18 @@ export function LowStock() {
                           <td className="px-4 py-3 text-xs text-muted">{p.category}</td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2 flex-wrap">
-                              {p.storeStocks.map(({ sid, current, min, low }) => (
-                                <StoreChip
-                                  key={sid}
-                                  label={shortName(sid)}
-                                  color={storeInfo[sid]?.color ?? '#888'}
-                                  current={current}
-                                  min={min}
-                                  low={low}
-                                />
-                              ))}
+                              {p.storeStocks
+                                .filter(({ sid }) => !storeIds.includes(filter) || sid === filter)
+                                .map(({ sid, current, min, low }) => (
+                                  <StoreChip
+                                    key={sid}
+                                    label={shortName(sid)}
+                                    color={storeInfo[sid]?.color ?? '#888'}
+                                    current={current}
+                                    min={min}
+                                    low={low}
+                                  />
+                                ))}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-center">
