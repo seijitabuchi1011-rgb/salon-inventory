@@ -5,13 +5,13 @@ import { Badge } from '../components/Badge'
 import { Btn } from '../components/Btn'
 import { useAppStore } from '../store'
 
-type Filter = 'すべて' | '緊急のみ' | 'flag店' | 'Lien店' | '両店とも不足'
-
 export function LowStock() {
-  const { currentStore, products, stocks } = useAppStore()
+  const { currentStore, products, stocks, storeInfo } = useAppStore()
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [filter, setFilter] = useState<Filter>('すべて')
+  const [filter, setFilter] = useState<string>('すべて')
   const [categoryFilter, setCategoryFilter] = useState<string>('すべて')
+
+  const storeIds = Object.keys(storeInfo)
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -22,60 +22,64 @@ export function LowStock() {
   }
 
   const lowItems = products.flatMap((p) => {
-    const flagS = stocks.find((s) => s.productId === p.id && s.storeId === 'flag')
-    const lienS = stocks.find((s) => s.productId === p.id && s.storeId === 'lien')
+    const storeStocks = storeIds.map((sid) => {
+      const s = stocks.find((st) => st.productId === p.id && st.storeId === sid)
+      const active = s?.active ?? true
+      const current = s?.currentStock ?? 0
+      const min = s?.minStock ?? 3
+      const low = active && current <= min
+      return { sid, current, min, low, active }
+    })
 
-    const flagActive = flagS?.active ?? true
-    const lienActive = lienS?.active ?? true
-    const flagCurrent = flagS?.currentStock ?? 0
-    const lienCurrent = lienS?.currentStock ?? 0
-    const flagMin = flagS?.minStock ?? 3
-    const lienMin = lienS?.minStock ?? 3
+    const anyLow = storeStocks.some((s) => s.low)
 
-    const flagLow = flagActive && flagCurrent <= flagMin
-    const lienLow = lienActive && lienCurrent <= lienMin
+    if (currentStore !== 'all') {
+      if (!storeStocks.find((s) => s.sid === currentStore)?.low) return []
+    } else if (!anyLow) {
+      return []
+    }
 
-    // currentStore フィルタ
-    if (currentStore === 'flag' && !flagLow) return []
-    if (currentStore === 'lien' && !lienLow) return []
-    if (currentStore === 'all' && !flagLow && !lienLow) return []
+    const urgent = storeStocks.some((s) => s.active && s.current === 0)
 
-    return [{
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      flag: flagCurrent,
-      lien: lienCurrent,
-      flagMin,
-      lienMin,
-      flagLow,
-      lienLow,
-      urgent: (flagActive && flagCurrent === 0) || (lienActive && lienCurrent === 0),
-    }]
+    return [{ id: p.id, name: p.name, category: p.category, storeStocks, urgent }]
   })
+
+  const filterTabs = ['すべて', '緊急のみ', ...storeIds, '両店とも不足']
 
   const filtered = lowItems.filter((p) => {
     if (filter === '緊急のみ') return p.urgent
-    if (filter === 'flag店') return p.flagLow
-    if (filter === 'Lien店') return p.lienLow
-    if (filter === '両店とも不足') return p.flagLow && p.lienLow
+    if (filter === '両店とも不足') return p.storeStocks.filter((s) => s.active).every((s) => s.low)
+    if (storeIds.includes(filter)) return p.storeStocks.find((s) => s.sid === filter)?.low ?? false
     return true
   })
 
   const categories = ['すべて', ...Array.from(new Set(filtered.map((p) => p.category).filter(Boolean))).sort()]
   const displayed = categoryFilter === 'すべて' ? filtered : filtered.filter((p) => p.category === categoryFilter)
 
-  const handleFilterChange = (f: Filter) => {
+  const handleFilterChange = (f: string) => {
     setFilter(f)
     setCategoryFilter('すべて')
   }
 
   const urgentCount = lowItems.filter((p) => p.urgent).length
-  const storeLabel = currentStore === 'flag' ? 'flag美容室' : currentStore === 'lien' ? 'Lien美容室' : '全店'
+  const storeLabel = currentStore === 'all' ? '全店' : (storeInfo[currentStore]?.name ?? currentStore)
+
+  const tabLabel = (f: string) => {
+    if (f === 'すべて' || f === '緊急のみ' || f === '両店とも不足') return f
+    const name = storeInfo[f]?.name ?? f
+    return name.replace('美容室', '').replace('美容院', '').trim() + '店'
+  }
+
+  const shortName = (sid: string) =>
+    storeInfo[sid]?.name?.replace('美容室', '').replace('美容院', '').trim() ?? sid
 
   function exportCsv() {
-    const header = ['商品名', 'カテゴリ', 'flag在庫', 'Lien在庫', 'flag下限', 'Lien下限']
-    const rows = displayed.map((p) => [p.name, p.category, p.flag, p.lien, p.flagMin, p.lienMin])
+    const storeHeaders = storeIds.flatMap((sid) => [`${storeInfo[sid]?.name ?? sid}在庫`, `${storeInfo[sid]?.name ?? sid}下限`])
+    const header = ['商品名', 'カテゴリ', ...storeHeaders]
+    const rows = displayed.map((p) => [
+      p.name, p.category,
+      ...p.storeStocks.flatMap((s) => [s.current, s.min]),
+    ])
     const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
@@ -94,9 +98,7 @@ export function LowStock() {
           <div className="px-4 md:px-6 pt-5 pb-3 bg-surface border-b border-border">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <div className="flex-1 min-w-0">
-                <p className="text-2xs text-faint">
-                  {storeLabel} · 下限を下回っている商品
-                </p>
+                <p className="text-2xs text-faint">{storeLabel} · 下限を下回っている商品</p>
                 <p className="text-2xl md:text-3xl font-bold text-text">
                   {lowItems.length} 商品
                   {urgentCount > 0 && (
@@ -112,7 +114,7 @@ export function LowStock() {
               </div>
             </div>
             <div className="flex gap-2 overflow-x-auto">
-              {(['すべて', '緊急のみ', 'flag店', 'Lien店', '両店とも不足'] as Filter[]).map((f) => (
+              {filterTabs.map((f) => (
                 <button
                   key={f}
                   onClick={() => handleFilterChange(f)}
@@ -120,7 +122,7 @@ export function LowStock() {
                     filter === f ? 'bg-accent text-white' : 'bg-bg text-muted border border-border'
                   }`}
                 >
-                  {f}
+                  {tabLabel(f)}
                 </button>
               ))}
             </div>
@@ -150,7 +152,7 @@ export function LowStock() {
               </div>
             ) : (
               <>
-                {/* モバイル: カードリスト（カード全体タップで選択） */}
+                {/* モバイル: カードリスト */}
                 <div className="md:hidden divide-y divide-border">
                   {displayed.map((p) => {
                     const checked = selected.has(p.id)
@@ -168,22 +170,22 @@ export function LowStock() {
                           {checked && <span className="text-xs leading-none">✓</span>}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-0.5">
                             <span className="font-semibold text-text text-sm truncate">{p.name}</span>
                             {p.urgent && <Badge variant="danger">緊急</Badge>}
                           </div>
                           <p className="text-xs text-muted mb-2">{p.category}</p>
-                          <div className="flex gap-3 flex-wrap">
-                            <span className="text-xs">
-                              <span className="font-semibold text-muted mr-1">flag</span>
-                              <span className={`font-bold tabular-nums ${p.flagLow ? 'text-danger' : 'text-text'}`}>{p.flag}</span>
-                              <span className="text-faint">/{p.flagMin}</span>
-                            </span>
-                            <span className="text-xs">
-                              <span className="font-semibold text-muted mr-1">Lien</span>
-                              <span className={`font-bold tabular-nums ${p.lienLow ? 'text-danger' : 'text-text'}`}>{p.lien}</span>
-                              <span className="text-faint">/{p.lienMin}</span>
-                            </span>
+                          <div className="flex gap-2 flex-wrap">
+                            {p.storeStocks.map(({ sid, current, min, low }) => (
+                              <StoreChip
+                                key={sid}
+                                label={shortName(sid)}
+                                color={storeInfo[sid]?.color ?? '#888'}
+                                current={current}
+                                min={min}
+                                low={low}
+                              />
+                            ))}
                           </div>
                         </div>
                       </button>
@@ -198,10 +200,7 @@ export function LowStock() {
                       <th className="px-5 py-3 w-10"></th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#1B5EB8' }}>flag在庫</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#1B5EB8' }}>flag下限</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#7B2FA8' }}>Lien在庫</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold w-20" style={{ color: '#7B2FA8' }}>Lien下限</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted">在庫状況</th>
                       <th className="px-4 py-3 w-20"></th>
                     </tr>
                   </thead>
@@ -230,10 +229,20 @@ export function LowStock() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs text-muted">{p.category}</td>
-                          <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.flagLow ? 'text-danger' : 'text-text'}`}>{p.flag}</td>
-                          <td className="px-4 py-3 text-right text-muted tabular-nums">{p.flagMin}</td>
-                          <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.lienLow ? 'text-danger' : 'text-text'}`}>{p.lien}</td>
-                          <td className="px-4 py-3 text-right text-muted tabular-nums">{p.lienMin}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2 flex-wrap">
+                              {p.storeStocks.map(({ sid, current, min, low }) => (
+                                <StoreChip
+                                  key={sid}
+                                  label={shortName(sid)}
+                                  color={storeInfo[sid]?.color ?? '#888'}
+                                  current={current}
+                                  min={min}
+                                  low={low}
+                                />
+                              ))}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <Btn variant="ghost" size="sm">発注</Btn>
                           </td>
@@ -248,5 +257,30 @@ export function LowStock() {
         </main>
       </div>
     </div>
+  )
+}
+
+function StoreChip({
+  label,
+  color,
+  current,
+  min,
+  low,
+}: {
+  label: string
+  color: string
+  current: number
+  min: number
+  low: boolean
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border"
+      style={{ borderColor: color + '40', backgroundColor: color + '14' }}
+    >
+      <span className="font-semibold" style={{ color }}>{label}</span>
+      <span className={`font-bold tabular-nums ${low ? 'text-danger' : 'text-text'}`}>{current}</span>
+      <span className="text-faint">/{min}</span>
+    </span>
   )
 }
