@@ -4,7 +4,7 @@ import { SideNav } from '../components/SideNav'
 import { Card } from '../components/Card'
 import { Btn } from '../components/Btn'
 import { StoreDot } from '../components/StoreDot'
-import { useAppStore } from '../store'
+import { useAppStore, readDeletedTxIds, readDeletedTrIds, readDeletedProductIds } from '../store'
 import { writeToFirestore, readFromFirestore } from '../lib/firestore'
 import { sendNotification } from '../lib/email'
 import type { StoreInfo } from '../store'
@@ -406,6 +406,12 @@ export function Settings() {
   const [cloudSaving, setCloudSaving] = useState(false)
   const [cloudLoading, setCloudLoading] = useState(false)
   const [firestoreInfo, setFirestoreInfo] = useState<{ lastModifiedBy?: string; lastModified?: number } | null>(null)
+  const [now, setNow] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     readFromFirestore().then((data) => {
@@ -463,6 +469,9 @@ export function Settings() {
         staffPurchases, staffPayments, staffMembers,
         storeInfo, storeOrder, appSettings, stocktakeSnapshots,
         categories, makers, dealers, dealerReps,
+        deletedTxIds: [...readDeletedTxIds()],
+        deletedTrIds: [...readDeletedTrIds()],
+        deletedProductIds: [...readDeletedProductIds()],
       })
       localStorage.setItem('salon-inventory-last-write', Date.now().toString())
       showToast('クラウドに保存しました ✓')
@@ -1003,9 +1012,9 @@ export function Settings() {
 
                   <Card>
                     <p className="text-xs font-semibold text-muted mb-1">アプリ情報</p>
-                    <Row label="ビルド日時">
+                    <Row label="現在日時">
                       <span className="text-xs text-muted font-mono">
-                        {new Date(__BUILD_TIME__).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {now.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </Row>
                     <Row label="商品数">
