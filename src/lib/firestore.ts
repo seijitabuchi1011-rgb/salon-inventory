@@ -46,7 +46,7 @@ export function subscribeToFirestore({ onData, onEmpty, onError }: Callbacks) {
   }
 
   function buildFull(): FirestoreData {
-    return { ...mainSnap!, transactions, transfers, staffPurchases, staffPayments, deletedTxIds, deletedTrIds }
+    return { ...mainSnap!, transactions, transfers, staffPurchases, staffPayments, deletedTxIds, deletedTrIds, deletedProductIds: mainSnap?.deletedProductIds ?? [] }
   }
 
   // 全ドキュメントの初回ロードが揃ったら一度だけ呼ぶ
@@ -200,6 +200,7 @@ export async function readFromFirestore(): Promise<FirestoreData | null> {
       : ((d.transactions        as FirestoreData['transactions'])   ?? []),
     deletedTxIds: txSnap.exists() ? ((txSnap.data().deletedIds as string[]) ?? []) : [],
     deletedTrIds: trSnap.exists() ? ((trSnap.data().deletedIds as string[]) ?? []) : [],
+    deletedProductIds: (d.deletedProductIds as string[]) ?? [],
     transfers: trSnap.exists()
       ? ((trSnap.data().items   as FirestoreData['transfers'])      ?? [])
       : ((d.transfers           as FirestoreData['transfers'])      ?? []),
@@ -231,6 +232,7 @@ export async function writeToFirestore(data: FirestoreData, deviceId?: string): 
       dealerReps:         data.dealerReps  ?? [],
       lastModified:       now,
       lastModifiedBy:     deviceId ?? null,
+      deletedProductIds:  data.deletedProductIds ?? [],
     }),
     setDoc(TX_DOC,        { items: data.transactions, deletedIds: data.deletedTxIds ?? [], lastModified: now }),
     setDoc(TRANSFERS_DOC, { items: data.transfers, deletedIds: data.deletedTrIds ?? [], lastModified: now }),

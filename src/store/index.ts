@@ -57,6 +57,19 @@ function pruneDeletedTrIds(firestoreTrIds: Set<string>) {
     localStorage.setItem(DELETED_TR_KEY, JSON.stringify(kept))
   } catch { /* ignore */ }
 }
+
+// 商品削除のtombstone（削除後にonSnapshotキャッシュで復活するのを防ぐ）
+const DELETED_PRODUCT_KEY = 'salon-deleted-product-ids'
+export function readDeletedProductIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(DELETED_PRODUCT_KEY) ?? '[]')) } catch { return new Set() }
+}
+function appendDeletedProductId(id: string) {
+  try {
+    const ids = readDeletedProductIds()
+    ids.add(id)
+    localStorage.setItem(DELETED_PRODUCT_KEY, JSON.stringify([...ids].slice(-500)))
+  } catch { /* QuotaExceeded → 諦める */ }
+}
 import type { StoreFilter, StoreId, Product, StoreStock, Transaction, Transfer, TransferStatus, StaffPurchase, StocktakeSnapshot, StaffPayment } from '../types'
 
 export interface StoreInfo {
@@ -131,6 +144,7 @@ export interface FirestoreData {
   lastModifiedBy?: string
   deletedTxIds?: string[]  // 削除済みトランザクションID（他端末に伝播するためFirestoreに含める）
   deletedTrIds?: string[]  // 削除済み移動履歴ID（他端末に伝播するためFirestoreに含める）
+  deletedProductIds?: string[]  // 削除済み商品ID（他端末に伝播するためFirestoreに含める）
 }
 
 interface AppState {
@@ -1043,19 +1057,23 @@ export const useAppStore = create<AppState>()(
               : [...state.stocks, stamped],
           }
         }),
-      deleteProduct: (id) =>
+      deleteProduct: (id) => {
+        appendDeletedProductId(id)
         set((state) => ({
           products: state.products.filter((p) => p.id !== id),
           stocks: state.stocks.filter((s) => s.productId !== id),
-        })),
-      bulkDeleteProducts: (ids) =>
+        }))
+      },
+      bulkDeleteProducts: (ids) => {
+        for (const id of ids) appendDeletedProductId(id)
         set((state) => {
           const idSet = new Set(ids)
           return {
             products: state.products.filter((p) => !idSet.has(p.id)),
             stocks: state.stocks.filter((s) => !idSet.has(s.productId)),
           }
-        }),
+        })
+      },
       reorderProducts: (activeId, overId) =>
         set((state) => {
           const from = state.products.findIndex((p) => p.id === activeId)
@@ -1404,16 +1422,23 @@ export const useAppStore = create<AppState>()(
               return { month: local.month, counts: mergedCounts }
             })(),
             // 商品: タイムスタンプで新しい方を優先（在庫と同じ戦略）。
-            // ローカルで編集直後はlastModifiedが新しいためFirestoreの古いデータで上書きされない。
-            // Firestoreに存在しないローカル追加商品は保持する。
-            // 画像はローカルを優先（別途Firebase Storageで同期）。
+            // 削除済みIDはtombstoneで管理し、Firestoreから古いデータが届いても復活しない。
+            // 他端末の削除も deletedProductIds 経由で伝播させる。
             products: (() => {
               if (!data.products) return state.products
+              // 他端末からのtombstoneを取り込む
+              const remoteDeletedProductIds = new Set(data.deletedProductIds ?? [])
+              const localDeletedProductIds = readDeletedProductIds()
+              for (const id of remoteDeletedProductIds) {
+                if (!localDeletedProductIds.has(id)) appendDeletedProductId(id)
+              }
+              const deletedProductIds = new Set([...localDeletedProductIds, ...remoteDeletedProductIds])
+
               const localMap = new Map(state.products.map((p) => [p.id, p]))
               const productMap = new Map<string, Product>()
               for (const fp of data.products) {
+                if (deletedProductIds.has(fp.id)) continue  // 削除済みは無視
                 const lp = localMap.get(fp.id)
-                // ローカルの方が新しい場合はローカルを優先
                 if (lp && (lp.lastModified ?? 0) > (fp.lastModified ?? 0)) {
                   productMap.set(fp.id, lp)
                 } else {
@@ -1421,7 +1446,9 @@ export const useAppStore = create<AppState>()(
                 }
               }
               for (const lp of state.products) {
-                if (!productMap.has(lp.id)) productMap.set(lp.id, lp)
+                if (!productMap.has(lp.id) && !deletedProductIds.has(lp.id)) {
+                  productMap.set(lp.id, lp)
+                }
               }
               return [...productMap.values()]
             })(),

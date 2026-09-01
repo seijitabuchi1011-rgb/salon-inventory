@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { subscribeToProductImages, writeToFirestore, subscribeToFirestore, readFromFirestore } from '../lib/firestore'
-import { useAppStore, readDeletedTxIds, readDeletedTrIds } from '../store'
+import { useAppStore, readDeletedTxIds, readDeletedTrIds, readDeletedProductIds } from '../store'
 import { useSyncStatus } from '../lib/syncStatus'
 
 const DEVICE_ID_KEY = 'salon-inventory-device-id'
@@ -25,7 +25,7 @@ async function pushToFirestore(
   setStatus('saving')
   console.log('[SyncStatus] saving...')
   try {
-    await writeToFirestore({ ...state, deletedTxIds: [...readDeletedTxIds()], deletedTrIds: [...readDeletedTrIds()] }, deviceId)
+    await writeToFirestore({ ...state, deletedTxIds: [...readDeletedTxIds()], deletedTrIds: [...readDeletedTrIds()], deletedProductIds: [...readDeletedProductIds()] }, deviceId)
     setStatus('saved')
     console.log('[SyncStatus] saved ✓')
     _savedTimer = setTimeout(() => { setStatus('idle'); _savedTimer = null }, 3000)
