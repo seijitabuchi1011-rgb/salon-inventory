@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AppBar } from '../components/AppBar'
 import { SideNav } from '../components/SideNav'
 import { Badge } from '../components/Badge'
@@ -208,8 +208,17 @@ export function Stocktake() {
     return snap
   })
 
-  // 入力済み実棚数: Zustand経由でFirestoreに同期（他端末でリアルタイム共有）
   const currentMonth = new Date().toISOString().slice(0, 7)
+
+  // 前月以前のドラフトが残っていたら画面を開いた時点でFirestoreから削除
+  useEffect(() => {
+    if (stocktakeDraft && stocktakeDraft.month !== currentMonth) {
+      setStocktakeDraft(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 入力済み実棚数: Zustand経由でFirestoreに同期（他端末でリアルタイム共有）
   const actualCounts: Record<string, Record<string, number>> =
     (stocktakeDraft?.month === currentMonth ? stocktakeDraft.counts : null) ?? { flag: {}, lien: {} }
   const setActualCounts = (updater: Record<string, Record<string, number>> | ((prev: Record<string, Record<string, number>>) => Record<string, Record<string, number>>)) => {
@@ -218,6 +227,10 @@ export function Stocktake() {
   }
 
   const month = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+
+  // 今月すでに完了済みかチェック（store別）
+  const completedThisMonth = (sid: string) =>
+    stocktakeSnapshots.some((s) => s.month === currentMonth && s.storeId === sid)
 
   // 選択店舗でアクティブな商品一覧
   const items = products
@@ -306,7 +319,13 @@ export function Stocktake() {
       // localStorageには保存済みのため次回起動時にsyncで復元される
     }
     setSaving(false)
-    setStocktakeDraft({ month: currentMonth, counts: { ...actualCounts, [store]: {} } })
+    // 両店舗ともその月の棚卸が完了したらドラフトをnullにリセット
+    const otherStore = store === 'flag' ? 'lien' : 'flag'
+    if (completedThisMonth(otherStore)) {
+      setStocktakeDraft(null)
+    } else {
+      setStocktakeDraft({ month: currentMonth, counts: { ...actualCounts, [store]: {} } })
+    }
     setShowCompleteModal(false)
     setStatusFilter('すべて')
     setCategory('すべて')
@@ -355,6 +374,21 @@ export function Stocktake() {
         <main className="flex-1 flex flex-col overflow-hidden bg-bg">
 
           {screenTab === '棚卸実施' && (<>
+          {/* 今月完了済みバナー */}
+          {completedThisMonth(store) && (
+            <div className="px-4 py-2.5 bg-ok/10 border-b border-ok/30 flex items-center gap-2">
+              <span className="text-ok text-sm font-bold">✓ {month} の棚卸は完了しています</span>
+              <span className="text-xs text-muted">再度実施する場合は下記から入力できます</span>
+            </div>
+          )}
+          {/* 他店舗完了通知 */}
+          {!completedThisMonth(store) && completedThisMonth(store === 'flag' ? 'lien' : 'flag') && (
+            <div className="px-4 py-2 bg-accent/8 border-b border-accent/20 flex items-center gap-2">
+              <span className="text-xs font-semibold text-accent">
+                {store === 'flag' ? 'Lien 美容室' : 'flag 美容室'} は今月の棚卸完了済み
+              </span>
+            </div>
+          )}
           {/* ヘッダー */}
           <div className="px-6 pt-5 pb-4 bg-surface border-b border-border">
             {/* 店舗タブ行 */}
