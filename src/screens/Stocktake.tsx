@@ -6,7 +6,7 @@ import { Btn } from '../components/Btn'
 import { Card } from '../components/Card'
 import { StoreDot } from '../components/StoreDot'
 import { useAppStore } from '../store'
-import { saveStocktakeDirectly } from '../lib/firestore'
+import { saveStocktakeDirectly, updateStocktakeSnapshotDirectly } from '../lib/firestore'
 import type { StoreId, StocktakeSnapshot, Product, StoreStock } from '../types'
 
 type StoreTab = 'flag' | 'lien'
@@ -25,22 +25,38 @@ const CATEGORIES = [
   'シャンプー', 'トリートメント', 'アウトバスTR', 'スタイリング', 'オイル',
 ]
 
+type PriceType = 'purchase' | 'sell'
 type ScreenTab = '棚卸実施' | '月次記録'
 
 // ────────────────────────────────────────────
 // 月次記録タブ
 // ────────────────────────────────────────────
+type EditForm = {
+  id: string
+  storeLabel: string
+  total: string
+  date: string
+  confirmedCount: string
+  totalItems: string
+  diffCount: string
+}
+
 function HistoryTab({
   snapshots,
   products,
   stocks,
   onDelete,
+  onUpdate,
 }: {
   snapshots: StocktakeSnapshot[]
   products: Product[]
   stocks: StoreStock[]
   onDelete: (id: string) => void
+  onUpdate: (snap: StocktakeSnapshot) => Promise<void>
 }) {
+  const [editForm, setEditForm] = useState<EditForm | null>(null)
+  const [saving, setSaving] = useState(false)
+
   // 現在の在庫評価額（理論値）
   const calcTotal = (storeId: StoreId) =>
     products.reduce((sum, p) => {
@@ -56,6 +72,36 @@ function HistoryTab({
   function fmtMonth(ym: string) {
     const [y, m] = ym.split('-')
     return `${y}年${parseInt(m)}月`
+  }
+
+  function openEdit(snap: StocktakeSnapshot, label: string) {
+    setEditForm({
+      id: snap.id,
+      storeLabel: label,
+      total: String(snap.total),
+      date: snap.date,
+      confirmedCount: String(snap.confirmedCount),
+      totalItems: String(snap.totalItems),
+      diffCount: String(snap.diffCount),
+    })
+  }
+
+  async function saveEdit() {
+    if (!editForm) return
+    const original = snapshots.find(s => s.id === editForm.id)
+    if (!original) return
+    setSaving(true)
+    const updated: StocktakeSnapshot = {
+      ...original,
+      total: Number(editForm.total) || 0,
+      date: editForm.date,
+      confirmedCount: Number(editForm.confirmedCount) || 0,
+      totalItems: Number(editForm.totalItems) || 0,
+      diffCount: Number(editForm.diffCount) || 0,
+    }
+    await onUpdate(updated)
+    setSaving(false)
+    setEditForm(null)
   }
 
   return (
@@ -135,8 +181,12 @@ function HistoryTab({
                       )}
                       <span className="text-xs text-faint">{flagSnap.date}</span>
                       <button
+                        onClick={() => openEdit(flagSnap, 'flag')}
+                        className="text-xs text-muted hover:text-accent ml-1 px-1.5 py-0.5 border border-border rounded"
+                      >編集</button>
+                      <button
                         onClick={() => { if (confirm(`${fmtMonth(month)} flag の記録を削除しますか？`)) onDelete(flagSnap.id) }}
-                        className="text-xs text-faint hover:text-danger ml-1"
+                        className="text-xs text-faint hover:text-danger"
                       >✕</button>
                     </div>
                   ) : (
@@ -159,8 +209,12 @@ function HistoryTab({
                       )}
                       <span className="text-xs text-faint">{lienSnap.date}</span>
                       <button
+                        onClick={() => openEdit(lienSnap, 'Lien')}
+                        className="text-xs text-muted hover:text-accent ml-1 px-1.5 py-0.5 border border-border rounded"
+                      >編集</button>
+                      <button
                         onClick={() => { if (confirm(`${fmtMonth(month)} Lien の記録を削除しますか？`)) onDelete(lienSnap.id) }}
-                        className="text-xs text-faint hover:text-danger ml-1"
+                        className="text-xs text-faint hover:text-danger"
                       >✕</button>
                     </div>
                   ) : (
@@ -182,20 +236,114 @@ function HistoryTab({
           </div>
         )}
       </div>
+
+      {/* 編集モーダル */}
+      {editForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm mx-4 shadow-xl flex flex-col gap-4">
+            <div>
+              <p className="text-lg font-bold text-text">棚卸記録を修正</p>
+              <p className="text-xs text-muted mt-1">{editForm.storeLabel} 美容室</p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-muted">在庫合計金額（円）</span>
+                <input
+                  type="number"
+                  value={editForm.total}
+                  onChange={e => setEditForm(f => f && { ...f, total: e.target.value })}
+                  className="border border-border rounded-lg px-3 py-2 text-base font-bold text-text focus:outline-none focus:border-accent"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-muted">棚卸し実施日</span>
+                <input
+                  type="date"
+                  value={editForm.date}
+                  onChange={e => setEditForm(f => f && { ...f, date: e.target.value })}
+                  className="border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+                />
+              </label>
+
+              <div className="grid grid-cols-3 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-muted">確認済み</span>
+                  <input
+                    type="number"
+                    value={editForm.confirmedCount}
+                    onChange={e => setEditForm(f => f && { ...f, confirmedCount: e.target.value })}
+                    className="border border-border rounded-lg px-2 py-2 text-sm text-text focus:outline-none focus:border-accent"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-muted">総商品数</span>
+                  <input
+                    type="number"
+                    value={editForm.totalItems}
+                    onChange={e => setEditForm(f => f && { ...f, totalItems: e.target.value })}
+                    className="border border-border rounded-lg px-2 py-2 text-sm text-text focus:outline-none focus:border-accent"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-muted">差異数</span>
+                  <input
+                    type="number"
+                    value={editForm.diffCount}
+                    onChange={e => setEditForm(f => f && { ...f, diffCount: e.target.value })}
+                    className="border border-border rounded-lg px-2 py-2 text-sm text-text focus:outline-none focus:border-accent"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Btn variant="ghost" className="flex-1" onClick={() => setEditForm(null)} disabled={saving}>キャンセル</Btn>
+              <Btn variant="primary" className="flex-[2]" onClick={saveEdit} disabled={saving}>
+                {saving ? '保存中...' : '✓ 保存する'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export function Stocktake() {
-  const { products, stocks, upsertStock, stocktakeSnapshots, addStocktakeSnapshot, deleteStocktakeSnapshot, stocktakeDraft, setStocktakeDraft } = useAppStore()
+  const { products, stocks, upsertStock, stocktakeSnapshots, addStocktakeSnapshot, updateStocktakeSnapshot, deleteStocktakeSnapshot, stocktakeDraft, setStocktakeDraft } = useAppStore()
   const [screenTab, setScreenTab] = useState<ScreenTab>('棚卸実施')
   const [store, setStore] = useState<StoreTab>('flag')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('すべて')
   const [category, setCategory] = useState('すべて')
+  const [priceTypeMap, setPriceTypeMap] = useState<Record<string, PriceType>>({})
   const [modal, setModal] = useState<{ productId: string; inputQty: number } | null>(null)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
+
+  function getPriceType(productId: string): PriceType {
+    return priceTypeMap[productId] ?? 'purchase'
+  }
+  function togglePriceType(productId: string) {
+    setPriceTypeMap(prev => ({
+      ...prev,
+      [productId]: (prev[productId] ?? 'purchase') === 'purchase' ? 'sell' : 'purchase',
+    }))
+  }
+  function setAllPriceType(type: PriceType) {
+    const map: Record<string, PriceType> = {}
+    items.forEach(item => { map[item.productId] = type })
+    setPriceTypeMap(map)
+  }
+  function setCategoryPriceType(cat: string, type: PriceType) {
+    setPriceTypeMap(prev => {
+      const next = { ...prev }
+      items.filter(i => i.category === cat).forEach(i => { next[i.productId] = type })
+      return next
+    })
+  }
 
   // 棚卸開始時の在庫スナップショット（このセッション中は変わらない）
   const [theoretical] = useState<Record<string, Record<string, number>>>(() => {
@@ -247,6 +395,7 @@ export function Stocktake() {
         name: p.name,
         category: p.category,
         purchasePrice: p.purchasePrice ?? 0,
+        sellPrice: p.sellPrice ?? 0,
         theoretical: theo,
         minStock: s?.minStock ?? 3,
         actual,
@@ -258,9 +407,14 @@ export function Stocktake() {
   const confirmed = items.filter((i) => i.status !== '未確認').length
   const diffCount = items.filter((i) => i.status === '差異').length
   const progress = items.length > 0 ? Math.round((confirmed / items.length) * 100) : 0
-  const totalValue = items.reduce((sum, item) =>
-    item.actual !== null ? sum + item.actual * item.purchasePrice : sum, 0
-  )
+  const totalValue = items.reduce((sum, item) => {
+    if (item.actual === null) return sum
+    const unitPrice = getPriceType(item.productId) === 'sell' ? item.sellPrice : item.purchasePrice
+    return sum + item.actual * unitPrice
+  }, 0)
+
+  const hasMixedPriceType = items.some(i => getPriceType(i.productId) === 'sell') &&
+    items.some(i => getPriceType(i.productId) === 'purchase')
 
   const filtered = items.filter((item) => {
     const matchStatus = statusFilter === 'すべて' || item.status === statusFilter
@@ -334,13 +488,15 @@ export function Stocktake() {
 
   function exportCsv() {
     const storeName = store === 'flag' ? 'flag美容室' : 'Lien美容室'
-    const header = ['商品名', 'カテゴリ', '仕入単価', '理論在庫', '実棚数', '差異', '状態', '在庫金額']
+    const header = ['商品名', 'カテゴリ', '単価', '価格基準', '理論在庫', '実棚数', '差異', '状態', '在庫金額']
     const rows = items.map((item) => {
+      const pType = getPriceType(item.productId)
+      const unitPrice = pType === 'sell' ? item.sellPrice : item.purchasePrice
       const diff = item.actual !== null ? item.actual - item.theoretical : ''
-      const value = item.actual !== null ? item.actual * item.purchasePrice : ''
-      return [item.name, item.category, item.purchasePrice, item.theoretical, item.actual ?? '', diff, item.status, value]
+      const value = item.actual !== null ? item.actual * unitPrice : ''
+      return [item.name, item.category, unitPrice, pType === 'sell' ? '販売価格' : '仕入価格', item.theoretical, item.actual ?? '', diff, item.status, value]
     })
-    rows.push(['', '', '', '', '', '', '合計金額', totalValue])
+    rows.push(['', '', '', '', '', '', '', '合計金額', totalValue])
     const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -460,7 +616,9 @@ export function Stocktake() {
                 <span className="text-2xl font-bold text-text leading-tight">
                   ¥{totalValue.toLocaleString()}
                 </span>
-                <span className="text-xs text-faint">実棚数 × 仕入単価</span>
+                <span className="text-xs text-faint">
+                  {hasMixedPriceType ? '仕入/販売 混在' : items.some(i => getPriceType(i.productId) === 'sell') ? '実棚数 × 販売単価' : '実棚数 × 仕入単価'}
+                </span>
               </Card>
             </div>
 
@@ -498,6 +656,33 @@ export function Stocktake() {
               ))}
               <span className="ml-auto text-xs text-faint flex-shrink-0 self-center">{filtered.length} 商品</span>
             </div>
+
+            {/* 価格基準一括切替 */}
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="text-xs text-muted font-semibold flex-shrink-0">価格基準：</span>
+              <button
+                onClick={() => setAllPriceType('purchase')}
+                className="flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold border border-border bg-bg text-muted hover:bg-text hover:text-white transition-colors"
+              >全て仕入価格</button>
+              <button
+                onClick={() => setAllPriceType('sell')}
+                className="flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold border border-border bg-bg text-muted hover:bg-text hover:text-white transition-colors"
+              >全て販売価格</button>
+              {category !== 'すべて' && (
+                <>
+                  <span className="text-xs text-faint">|</span>
+                  <span className="text-xs text-muted flex-shrink-0">「{category}」を：</span>
+                  <button
+                    onClick={() => setCategoryPriceType(category, 'purchase')}
+                    className="flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold border border-border bg-bg text-muted hover:bg-text hover:text-white transition-colors"
+                  >仕入価格</button>
+                  <button
+                    onClick={() => setCategoryPriceType(category, 'sell')}
+                    className="flex-shrink-0 px-3 h-7 rounded-full text-xs font-semibold border border-border bg-bg text-muted hover:bg-text hover:text-white transition-colors"
+                  >販売価格</button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* テーブル */}
@@ -518,7 +703,7 @@ export function Stocktake() {
                   <tr>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted">商品名</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted w-28">カテゴリ</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">仕入単価</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-28">単価（基準）</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">理論在庫</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-20">実棚数</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-muted w-16">差異</th>
@@ -530,14 +715,31 @@ export function Stocktake() {
                 <tbody>
                   {filtered.map((item) => {
                     const diff = item.actual !== null ? item.actual - item.theoretical : null
-                    const value = item.actual !== null ? item.actual * item.purchasePrice : null
+
+                    const priceType = getPriceType(item.productId)
+                    const unitPrice = priceType === 'sell' ? item.sellPrice : item.purchasePrice
+                    const stockValue = item.actual !== null ? item.actual * unitPrice : null
 
                     return (
                       <tr key={item.productId} className="border-b border-border hover:bg-bg transition-colors">
                         <td className="px-4 py-3 font-semibold text-text">{item.name}</td>
                         <td className="px-4 py-3 text-xs text-muted">{item.category}</td>
-                        <td className="px-4 py-3 text-right text-muted tabular-nums">
-                          {item.purchasePrice > 0 ? `¥${item.purchasePrice.toLocaleString()}` : '—'}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className="tabular-nums text-muted text-sm">
+                              {unitPrice > 0 ? `¥${unitPrice.toLocaleString()}` : '—'}
+                            </span>
+                            <button
+                              onClick={() => togglePriceType(item.productId)}
+                              className={`flex-shrink-0 inline-flex rounded overflow-hidden border text-[10px] font-bold ${
+                                priceType === 'sell' ? 'border-accent' : 'border-border'
+                              }`}
+                              title="仕入/販売 切替"
+                            >
+                              <span className={`px-1.5 py-0.5 ${priceType === 'purchase' ? 'bg-text text-white' : 'bg-bg text-muted'}`}>仕入</span>
+                              <span className={`px-1.5 py-0.5 ${priceType === 'sell' ? 'bg-accent text-white' : 'bg-bg text-muted'}`}>販売</span>
+                            </button>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">{item.theoretical}</td>
                         <td className="px-4 py-3 text-right font-bold tabular-nums">
@@ -549,7 +751,7 @@ export function Stocktake() {
                           {diff !== null ? (diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff) : '—'}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-text">
-                          {value !== null ? `¥${value.toLocaleString()}` : <span className="text-faint">—</span>}
+                          {stockValue !== null ? `¥${stockValue.toLocaleString()}` : <span className="text-faint">—</span>}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <Badge variant={STATUS_VARIANT[item.status]}>{item.status}</Badge>
@@ -574,6 +776,14 @@ export function Stocktake() {
               products={products}
               stocks={stocks}
               onDelete={deleteStocktakeSnapshot}
+              onUpdate={async (snap) => {
+                updateStocktakeSnapshot(snap)
+                try {
+                  await updateStocktakeSnapshotDirectly(snap, useAppStore.getState().stocktakeSnapshots)
+                } catch (e) {
+                  console.error('[Stocktake] snapshot更新失敗:', e)
+                }
+              }}
             />
           )}
         </main>
@@ -587,7 +797,11 @@ export function Stocktake() {
             <p className="text-base font-bold mb-1 leading-snug">{modalItem.name}</p>
             <p className="text-xs text-muted mb-5">
               理論在庫: {modalItem.theoretical} 個
-              {modalItem.purchasePrice > 0 && ` · 仕入単価: ¥${modalItem.purchasePrice.toLocaleString()}`}
+              {(() => {
+                const pType = getPriceType(modalItem.productId)
+                const unitPrice = pType === 'sell' ? modalItem.sellPrice : modalItem.purchasePrice
+                return unitPrice > 0 ? ` · ${pType === 'sell' ? '販売' : '仕入'}単価: ¥${unitPrice.toLocaleString()}` : ''
+              })()}
             </p>
 
             <p className="text-xs font-semibold text-muted mb-2">実棚数を入力</p>
@@ -612,7 +826,11 @@ export function Stocktake() {
                   diff < 0 ? 'text-danger' : diff > 0 ? 'text-ok' : 'text-muted'
                 }`}>
                   差異: {diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff} 個
-                  {modalItem.purchasePrice > 0 && ` · ¥${(modal.inputQty * modalItem.purchasePrice).toLocaleString()}`}
+                  {(() => {
+                    const pType = getPriceType(modalItem.productId)
+                    const unitPrice = pType === 'sell' ? modalItem.sellPrice : modalItem.purchasePrice
+                    return unitPrice > 0 ? ` · ¥${(modal.inputQty * unitPrice).toLocaleString()}` : ''
+                  })()}
                 </p>
               )
             })()}

@@ -241,6 +241,18 @@ export async function writeToFirestore(data: FirestoreData, deviceId?: string): 
   ])
 }
 
+// 棚卸スナップショットの更新（配列を置き換え）
+export async function updateStocktakeSnapshotDirectly(
+  updatedSnapshot: StocktakeSnapshot,
+  allSnapshots: StocktakeSnapshot[],
+): Promise<void> {
+  const updated = allSnapshots.map(s => s.id === updatedSnapshot.id ? updatedSnapshot : s)
+  await setDoc(MAIN_DOC, {
+    stocktakeSnapshots: updated,
+    lastModified: Date.now(),
+  }, { merge: true })
+}
+
 // 棚卸完了時の直接保存（syncループを経由せず確実に書き込む）
 export async function saveStocktakeDirectly(
   stocks: StoreStock[],

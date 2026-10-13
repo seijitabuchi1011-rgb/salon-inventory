@@ -190,6 +190,7 @@ interface AppState {
   removeStaffMember: (name: string) => void
   stocktakeSnapshots: StocktakeSnapshot[]
   addStocktakeSnapshot: (s: Omit<StocktakeSnapshot, 'id'>) => void
+  updateStocktakeSnapshot: (s: StocktakeSnapshot) => void
   deleteStocktakeSnapshot: (id: string) => void
   stocktakeDraft: { month: string; counts: Record<string, Record<string, number>> } | null
   setStocktakeDraft: (draft: { month: string; counts: Record<string, Record<string, number>> } | null) => void
@@ -1241,6 +1242,10 @@ export const useAppStore = create<AppState>()(
             { ...s, id: `SS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` },
             ...state.stocktakeSnapshots,
           ],
+        })),
+      updateStocktakeSnapshot: (updated) =>
+        set((state) => ({
+          stocktakeSnapshots: state.stocktakeSnapshots.map((s) => s.id === updated.id ? updated : s),
         })),
       deleteStocktakeSnapshot: (id) =>
         set((state) => ({
