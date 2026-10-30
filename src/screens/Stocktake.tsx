@@ -406,11 +406,34 @@ export function Stocktake() {
     return snap
   })
 
-  const currentMonth = new Date().toISOString().slice(0, 7)
+  const todayMonth = new Date().toISOString().slice(0, 7)
 
-  // 前月以前のドラフトが残っていたら画面を開いた時点でFirestoreから削除
+  // 対象月: ドラフトがあればその月を引き継ぐ、なければ今月
+  const [targetMonth, setTargetMonth] = useState<string>(() => {
+    if (stocktakeDraft && stocktakeDraft.month) return stocktakeDraft.month
+    return todayMonth
+  })
+
+  // 選択できる月の選択肢（今月 + 前2ヶ月）
+  const monthOptions = (() => {
+    const opts: string[] = []
+    for (let i = 0; i <= 2; i++) {
+      const d = new Date()
+      d.setDate(1)
+      d.setMonth(d.getMonth() - i)
+      opts.push(d.toISOString().slice(0, 7))
+    }
+    return opts
+  })()
+
+  // 対象月が変わったらドラフトが前々月以前なら削除
   useEffect(() => {
-    if (stocktakeDraft && stocktakeDraft.month !== currentMonth) {
+    if (!stocktakeDraft) return
+    const draftDate = new Date(stocktakeDraft.month + '-01')
+    const cutoff = new Date()
+    cutoff.setDate(1)
+    cutoff.setMonth(cutoff.getMonth() - 2)
+    if (draftDate < cutoff) {
       setStocktakeDraft(null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -418,17 +441,22 @@ export function Stocktake() {
 
   // 入力済み実棚数: Zustand経由でFirestoreに同期（他端末でリアルタイム共有）
   const actualCounts: Record<string, Record<string, number>> =
-    (stocktakeDraft?.month === currentMonth ? stocktakeDraft.counts : null) ?? { flag: {}, lien: {} }
+    (stocktakeDraft?.month === targetMonth ? stocktakeDraft.counts : null) ?? { flag: {}, lien: {} }
   const setActualCounts = (updater: Record<string, Record<string, number>> | ((prev: Record<string, Record<string, number>>) => Record<string, Record<string, number>>)) => {
     const newCounts = typeof updater === 'function' ? updater(actualCounts) : updater
-    setStocktakeDraft({ month: currentMonth, counts: newCounts })
+    setStocktakeDraft({ month: targetMonth, counts: newCounts })
   }
 
-  const month = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+  function fmtMonthLabel(ym: string) {
+    const [y, m] = ym.split('-')
+    return `${y}年${parseInt(m)}月`
+  }
 
-  // 今月すでに完了済みかチェック（store別）
+  const month = fmtMonthLabel(targetMonth)
+
+  // 対象月ですでに完了済みかチェック（store別）
   const completedThisMonth = (sid: string) =>
-    stocktakeSnapshots.some((s) => s.month === currentMonth && s.storeId === sid)
+    stocktakeSnapshots.some((s) => s.month === targetMonth && s.storeId === sid)
 
   // 選択店舗でアクティブな商品一覧
   const items = products
@@ -471,9 +499,6 @@ export function Stocktake() {
     return sum + item.actual * unitPrice
   }, 0)
 
-  const hasMixedPriceType = items.some(i => getPriceType(i.productId) === 'sell') &&
-    items.some(i => getPriceType(i.productId) === 'purchase')
-
   const filtered = items.filter((item) => {
     const matchStatus = statusFilter === 'すべて' || item.status === statusFilter
     const matchCat = category === 'すべて' || item.category === category
@@ -508,10 +533,10 @@ export function Stocktake() {
         active: s?.active ?? true,
       })
     })
-    // 月次スナップショットをZustandに追加
+    // 月次スナップショットをZustandに追加（対象月で保存）
     const today = new Date()
     addStocktakeSnapshot({
-      month: today.toISOString().slice(0, 7),
+      month: targetMonth,
       date: today.toISOString().slice(0, 10),
       storeId: store as StoreId,
       total: totalPurchase,
@@ -532,12 +557,12 @@ export function Stocktake() {
       // localStorageには保存済みのため次回起動時にsyncで復元される
     }
     setSaving(false)
-    // 両店舗ともその月の棚卸が完了したらドラフトをnullにリセット
+    // 両店舗ともその対象月の棚卸が完了したらドラフトをnullにリセット
     const otherStore = store === 'flag' ? 'lien' : 'flag'
     if (completedThisMonth(otherStore)) {
       setStocktakeDraft(null)
     } else {
-      setStocktakeDraft({ month: currentMonth, counts: { ...actualCounts, [store]: {} } })
+      setStocktakeDraft({ month: targetMonth, counts: { ...actualCounts, [store]: {} } })
     }
     setShowCompleteModal(false)
     setStatusFilter('すべて')
@@ -600,14 +625,14 @@ export function Stocktake() {
           {!completedThisMonth(store) && completedThisMonth(store === 'flag' ? 'lien' : 'flag') && (
             <div className="px-4 py-2 bg-accent/8 border-b border-accent/20 flex items-center gap-2">
               <span className="text-xs font-semibold text-accent">
-                {store === 'flag' ? 'Lien 美容室' : 'flag 美容室'} は今月の棚卸完了済み
+                {store === 'flag' ? 'Lien 美容室' : 'flag 美容室'} は {month} の棚卸完了済み
               </span>
             </div>
           )}
           {/* ヘッダー */}
           <div className="px-6 pt-5 pb-4 bg-surface border-b border-border">
-            {/* 店舗タブ行 */}
-            <div className="flex gap-2 mb-2">
+            {/* 店舗タブ行 + 対象月 */}
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               {(['flag', 'lien'] as StoreTab[]).map((s) => (
                 <button
                   key={s}
@@ -622,6 +647,18 @@ export function Stocktake() {
                   {s === 'flag' ? 'flag 美容室' : 'Lien 美容室'}
                 </button>
               ))}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-muted font-semibold flex-shrink-0">対象月</span>
+                <select
+                  value={targetMonth}
+                  onChange={e => setTargetMonth(e.target.value)}
+                  className="border border-border rounded-lg px-2 h-9 text-sm font-semibold text-text bg-bg focus:outline-none focus:border-accent"
+                >
+                  {monthOptions.map(ym => (
+                    <option key={ym} value={ym}>{fmtMonthLabel(ym)}{ym === todayMonth ? '（今月）' : ''}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             {/* ボタン行 */}
             <div className="flex gap-2 mb-4">
