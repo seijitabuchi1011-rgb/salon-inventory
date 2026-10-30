@@ -101,6 +101,7 @@ export interface StocktakeSnapshot {
   date: string        // YYYY-MM-DD
   storeId: StoreId
   total: number       // 在庫合計金額 (実棚数 × 仕入単価)
+  totalSell?: number  // 在庫合計金額 (実棚数 × 販売単価)
   confirmedCount: number
   diffCount: number
   totalItems: number

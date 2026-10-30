@@ -35,6 +35,7 @@ type EditForm = {
   id: string
   storeLabel: string
   total: string
+  totalSell: string
   date: string
   confirmedCount: string
   totalItems: string
@@ -79,6 +80,7 @@ function HistoryTab({
       id: snap.id,
       storeLabel: label,
       total: String(snap.total),
+      totalSell: String(snap.totalSell ?? ''),
       date: snap.date,
       confirmedCount: String(snap.confirmedCount),
       totalItems: String(snap.totalItems),
@@ -94,6 +96,7 @@ function HistoryTab({
     const updated: StocktakeSnapshot = {
       ...original,
       total: Number(editForm.total) || 0,
+      totalSell: editForm.totalSell !== '' ? Number(editForm.totalSell) || 0 : undefined,
       date: editForm.date,
       confirmedCount: Number(editForm.confirmedCount) || 0,
       totalItems: Number(editForm.totalItems) || 0,
@@ -145,9 +148,11 @@ function HistoryTab({
             {months.map((month, idx) => {
               const flagSnap = snapshots.find((s) => s.month === month && s.storeId === 'flag')
               const lienSnap = snapshots.find((s) => s.month === month && s.storeId === 'lien')
-              const total = (flagSnap?.total ?? 0) + (lienSnap?.total ?? 0)
+              const totalPurchase = (flagSnap?.total ?? 0) + (lienSnap?.total ?? 0)
+              const hasSell = flagSnap?.totalSell != null || lienSnap?.totalSell != null
+              const totalSellCombined = (flagSnap?.totalSell ?? 0) + (lienSnap?.totalSell ?? 0)
 
-              // 前月比（次の月のデータと比較）
+              // 前月比（仕入合計ベース）
               let prevTotal: number | null = null
               if (idx < months.length - 1) {
                 const prevMonth = months[idx + 1]
@@ -155,7 +160,7 @@ function HistoryTab({
                 const pLien = snapshots.find((s) => s.month === prevMonth && s.storeId === 'lien')
                 prevTotal = (pFlag?.total ?? 0) + (pLien?.total ?? 0)
               }
-              const diff = prevTotal !== null ? total - prevTotal : null
+              const diff = prevTotal !== null ? totalPurchase - prevTotal : null
 
               return (
                 <Card key={month} className="flex flex-col gap-0 p-0 overflow-hidden">
@@ -173,8 +178,19 @@ function HistoryTab({
                   {flagSnap ? (
                     <div className="flex items-center px-4 py-3 border-b border-border gap-3">
                       <StoreDot store="flag" />
-                      <span className="text-sm text-text w-20">flag</span>
-                      <span className="flex-1 text-base font-bold text-text tabular-nums">¥{flagSnap.total.toLocaleString()}</span>
+                      <span className="text-sm text-text w-16 flex-shrink-0">flag</span>
+                      <div className="flex-1 flex flex-col">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xs text-muted">仕入</span>
+                          <span className="text-base font-bold text-text tabular-nums">¥{flagSnap.total.toLocaleString()}</span>
+                        </div>
+                        {flagSnap.totalSell != null && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-xs text-accent">販売</span>
+                            <span className="text-base font-bold text-accent tabular-nums">¥{flagSnap.totalSell.toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
                       <span className="text-xs text-faint">{flagSnap.confirmedCount}/{flagSnap.totalItems}確認</span>
                       {flagSnap.diffCount > 0 && (
                         <span className="text-xs text-danger font-semibold">差異{flagSnap.diffCount}件</span>
@@ -192,7 +208,7 @@ function HistoryTab({
                   ) : (
                     <div className="flex items-center px-4 py-3 border-b border-border gap-3">
                       <StoreDot store="flag" />
-                      <span className="text-sm text-faint w-20">flag</span>
+                      <span className="text-sm text-faint w-16">flag</span>
                       <span className="text-sm text-faint">未実施</span>
                     </div>
                   )}
@@ -201,8 +217,19 @@ function HistoryTab({
                   {lienSnap ? (
                     <div className="flex items-center px-4 py-3 border-b border-border gap-3">
                       <StoreDot store="lien" />
-                      <span className="text-sm text-text w-20">Lien</span>
-                      <span className="flex-1 text-base font-bold text-text tabular-nums">¥{lienSnap.total.toLocaleString()}</span>
+                      <span className="text-sm text-text w-16 flex-shrink-0">Lien</span>
+                      <div className="flex-1 flex flex-col">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xs text-muted">仕入</span>
+                          <span className="text-base font-bold text-text tabular-nums">¥{lienSnap.total.toLocaleString()}</span>
+                        </div>
+                        {lienSnap.totalSell != null && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-xs text-accent">販売</span>
+                            <span className="text-base font-bold text-accent tabular-nums">¥{lienSnap.totalSell.toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
                       <span className="text-xs text-faint">{lienSnap.confirmedCount}/{lienSnap.totalItems}確認</span>
                       {lienSnap.diffCount > 0 && (
                         <span className="text-xs text-danger font-semibold">差異{lienSnap.diffCount}件</span>
@@ -220,15 +247,26 @@ function HistoryTab({
                   ) : (
                     <div className="flex items-center px-4 py-3 border-b border-border gap-3">
                       <StoreDot store="lien" />
-                      <span className="text-sm text-faint w-20">Lien</span>
+                      <span className="text-sm text-faint w-16">Lien</span>
                       <span className="text-sm text-faint">未実施</span>
                     </div>
                   )}
 
                   {/* 合計行 */}
-                  <div className="flex items-center px-4 py-3 gap-3 bg-bg">
-                    <span className="text-xs font-semibold text-muted w-20 ml-5">合計</span>
-                    <span className="flex-1 text-base font-bold text-accent tabular-nums">¥{total.toLocaleString()}</span>
+                  <div className="flex items-center px-4 py-3 gap-4 bg-bg">
+                    <span className="text-xs font-semibold text-muted ml-5 w-16 flex-shrink-0">合計</span>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xs text-muted">仕入</span>
+                        <span className="text-base font-bold text-text tabular-nums">¥{totalPurchase.toLocaleString()}</span>
+                      </div>
+                      {hasSell && (
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xs text-accent">販売</span>
+                          <span className="text-base font-bold text-accent tabular-nums">¥{totalSellCombined.toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Card>
               )
@@ -247,15 +285,27 @@ function HistoryTab({
             </div>
 
             <div className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-semibold text-muted">在庫合計金額（円）</span>
-                <input
-                  type="number"
-                  value={editForm.total}
-                  onChange={e => setEditForm(f => f && { ...f, total: e.target.value })}
-                  className="border border-border rounded-lg px-3 py-2 text-base font-bold text-text focus:outline-none focus:border-accent"
-                />
-              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-muted">仕入合計（円）</span>
+                  <input
+                    type="number"
+                    value={editForm.total}
+                    onChange={e => setEditForm(f => f && { ...f, total: e.target.value })}
+                    className="border border-border rounded-lg px-3 py-2 text-base font-bold text-text focus:outline-none focus:border-accent"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-accent">販売合計（円）</span>
+                  <input
+                    type="number"
+                    value={editForm.totalSell}
+                    onChange={e => setEditForm(f => f && { ...f, totalSell: e.target.value })}
+                    placeholder="未入力"
+                    className="border border-border rounded-lg px-3 py-2 text-base font-bold text-accent focus:outline-none focus:border-accent"
+                  />
+                </label>
+              </div>
 
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-semibold text-muted">棚卸し実施日</span>
@@ -407,6 +457,14 @@ export function Stocktake() {
   const confirmed = items.filter((i) => i.status !== '未確認').length
   const diffCount = items.filter((i) => i.status === '差異').length
   const progress = items.length > 0 ? Math.round((confirmed / items.length) * 100) : 0
+
+  // 仕入価格合計（常に purchasePrice で計算）
+  const totalPurchase = items.reduce((sum, item) =>
+    item.actual !== null ? sum + item.actual * item.purchasePrice : sum, 0)
+  // 販売価格合計（常に sellPrice で計算、sellPrice=0 の商品は除外）
+  const totalSell = items.reduce((sum, item) =>
+    item.actual !== null && item.sellPrice > 0 ? sum + item.actual * item.sellPrice : sum, 0)
+  // 価格基準トグルによる合計（既存の混在計算）
   const totalValue = items.reduce((sum, item) => {
     if (item.actual === null) return sum
     const unitPrice = getPriceType(item.productId) === 'sell' ? item.sellPrice : item.purchasePrice
@@ -456,7 +514,8 @@ export function Stocktake() {
       month: today.toISOString().slice(0, 7),
       date: today.toISOString().slice(0, 10),
       storeId: store as StoreId,
-      total: totalValue,
+      total: totalPurchase,
+      totalSell: totalSell,
       confirmedCount: confirmed,
       diffCount: diffCount,
       totalItems: items.length,
@@ -611,14 +670,19 @@ export function Stocktake() {
                 <span className="text-3xl font-bold text-danger">{diffCount}</span>
                 <span className="text-xs text-faint">要確認</span>
               </Card>
-              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[120px] border-accent">
-                <span className="text-xs text-accent font-semibold">在庫合計金額</span>
-                <span className="text-2xl font-bold text-text leading-tight">
-                  ¥{totalValue.toLocaleString()}
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[110px]">
+                <span className="text-xs text-muted font-semibold">仕入合計</span>
+                <span className="text-xl font-bold text-text leading-tight tabular-nums">
+                  ¥{totalPurchase.toLocaleString()}
                 </span>
-                <span className="text-xs text-faint">
-                  {hasMixedPriceType ? '仕入/販売 混在' : items.some(i => getPriceType(i.productId) === 'sell') ? '実棚数 × 販売単価' : '実棚数 × 仕入単価'}
+                <span className="text-xs text-faint">実棚数 × 仕入単価</span>
+              </Card>
+              <Card className="flex-shrink-0 flex flex-col gap-1 min-w-[110px] border-accent">
+                <span className="text-xs text-accent font-semibold">販売合計</span>
+                <span className="text-xl font-bold text-text leading-tight tabular-nums">
+                  ¥{totalSell.toLocaleString()}
                 </span>
+                <span className="text-xs text-faint">実棚数 × 販売単価</span>
               </Card>
             </div>
 
