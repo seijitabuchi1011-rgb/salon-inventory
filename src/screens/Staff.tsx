@@ -366,23 +366,21 @@ export function StaffScreen() {
             {/* KPI */}
             <div className="flex gap-2 flex-wrap">
               <div className="bg-bg rounded-lg px-3 py-2 flex flex-col">
-                <span className="text-2xs text-faint">購入・卸し合計</span>
+                <span className="text-2xs text-faint">購入合計</span>
                 <span className="text-lg font-bold text-text">¥{totalAmount.toLocaleString()}</span>
               </div>
               {totalPaid > 0 && (
                 <div className="bg-bg rounded-lg px-3 py-2 flex flex-col">
                   <span className="text-2xs text-faint">支払い済み</span>
-                  <span className="text-lg font-bold text-ok">−¥{totalPaid.toLocaleString()}</span>
+                  <span className="text-lg font-bold text-ok">¥{totalPaid.toLocaleString()}</span>
                 </div>
               )}
-              {selectedStaff !== '全員' && (
-                <div className={`rounded-lg px-3 py-2 flex flex-col ${balance <= 0 ? 'bg-ok-soft' : 'bg-danger-soft'}`}>
-                  <span className="text-2xs text-faint">残高（未払い）</span>
-                  <span className={`text-lg font-bold ${balance <= 0 ? 'text-ok' : 'text-danger'}`}>
-                    {balance <= 0 ? '精算済み' : `¥${balance.toLocaleString()}`}
-                  </span>
-                </div>
-              )}
+              <div className={`rounded-lg px-3 py-2 flex flex-col ${balance <= 0 ? 'bg-ok-soft' : 'bg-danger-soft'}`}>
+                <span className="text-2xs text-faint">未払い残高</span>
+                <span className={`text-lg font-bold ${balance <= 0 ? 'text-ok' : 'text-danger'}`}>
+                  {balance <= 0 ? '精算済み' : `¥${balance.toLocaleString()}`}
+                </span>
+              </div>
               <div className="bg-bg rounded-lg px-3 py-2 flex flex-col">
                 <span className="text-2xs text-faint">件数</span>
                 <span className="text-lg font-bold text-text">{filtered.filter((e) => e.entryType !== 'payment').length} 件</span>
