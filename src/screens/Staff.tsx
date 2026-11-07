@@ -236,12 +236,12 @@ export function StaffScreen() {
   }
 
   function handlePaymentSubmit() {
-    const amt = Number(paymentForm.amount)
+    const amt = Number(paymentForm.amount.replace(/,/g, ''))
     if (!paymentForm.staffName || !amt) return
     if (!staffMembers.includes(paymentForm.staffName)) addStaffMember(paymentForm.staffName)
     addStaffPayment({
       date: paymentForm.date,
-      amount: amt,
+      amount: Math.round(amt),
       staffName: paymentForm.staffName,
       storeId: paymentForm.storeId,
       note: paymentForm.note || undefined,
@@ -822,7 +822,7 @@ export function StaffScreen() {
             <div className="flex gap-2 justify-end">
               <Btn variant="ghost" onClick={() => setShowPaymentModal(false)}>キャンセル</Btn>
               <Btn variant="primary" onClick={handlePaymentSubmit}
-                disabled={!paymentForm.staffName || !paymentForm.amount || Number(paymentForm.amount) <= 0}
+                disabled={!paymentForm.staffName || !paymentForm.amount || Number(paymentForm.amount.replace(/,/g, '')) <= 0}
                 className="bg-ok border-ok hover:bg-ok/90">
                 ✓ 支払いを記録
               </Btn>
